@@ -1,0 +1,2171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vibe Drop — Test Level</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0d0d;
+      --surface: #1a1a1a;
+      --border: rgba(255,255,255,0.08);
+      --text: #f2f2f2;
+      --muted: #999;
+      --orange: #fb923c;
+      --red: #ef4444;
+      --gold: #ffd700;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Space Grotesk', system-ui, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .screen { display: none; position: absolute; inset: 0; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    /* ── TITLE ───────────────────────────────────────────── */
+    #screen-title {
+      align-items: center;
+      justify-content: center;
+      gap: 28px;
+      text-align: center;
+      padding: 40px;
+      background: radial-gradient(ellipse 80% 50% at 50% 30%, #1c0533 0%, #0d0d0d 65%);
+    }
+
+    .title-logo {
+      font-size: clamp(40px, 9vw, 72px);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+    .title-logo em { color: var(--orange); font-style: normal; }
+
+    .title-tagline {
+      font-size: clamp(14px, 2.5vw, 18px);
+      color: var(--muted);
+      max-width: 320px;
+    }
+
+    .title-howto {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .btn {
+      padding: 16px 52px;
+      background: var(--orange);
+      color: #0d0d0d;
+      border: none;
+      border-radius: 100px;
+      font-size: 17px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      letter-spacing: -0.01em;
+      transition: transform 0.1s, filter 0.1s;
+    }
+    .btn:hover  { filter: brightness(1.1); }
+    .btn:active { transform: scale(0.97); }
+    .btn.ghost {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,0.4);
+      padding: 16px 52px;
+      font-size: 17px;
+    }
+
+    /* ── HUD ─────────────────────────────────────────────── */
+    #game-hud {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 20px;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+
+    .hud-col { display: flex; flex-direction: column; gap: 2px; }
+    .hud-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+    .hud-val   { font-size: 16px; font-weight: 700; }
+
+    #hud-timer {
+      font-size: 36px;
+      font-weight: 800;
+      font-family: 'Space Mono', monospace;
+      letter-spacing: -0.02em;
+      transition: color 0.3s;
+    }
+    #hud-timer.urgent { color: var(--red); animation: blink 0.6s infinite; }
+    @keyframes blink { 50% { opacity: 0.5; } }
+    @keyframes timer-hit { 0% { transform: scale(1.35); color: var(--red); } 100% { transform: scale(1); } }
+    #hud-timer.hit { animation: timer-hit 0.35s ease-out; }
+
+    /* ── RARE ITEM ───────────────────────────────────────── */
+    @keyframes rare-entry {
+      0%   { filter: drop-shadow(0 0 0px #ffd700); }
+      35%  { filter: drop-shadow(0 0 20px #ffd700) drop-shadow(0 0 40px rgba(255,160,0,0.7)); }
+      100% { filter: drop-shadow(0 0 7px rgba(255,215,0,0.5)); }
+    }
+    .rare-sparkle { animation: rare-entry 1s ease-out forwards; }
+    .rare-glow    { filter: drop-shadow(0 0 7px rgba(255,215,0,0.45)); }
+
+    /* Widen the tap target for rare watches so they're easier to catch */
+    .fall-item.rare-glow::before,
+    .fall-item.rare-sparkle::before {
+      content: '';
+      position: absolute;
+      inset: -16px;
+    }
+
+    /* ── FAKE RARE (decoy that mimics the rare glow) ───────── */
+    @keyframes fake-rare-entry {
+      0%   { filter: drop-shadow(0 0 0px #7ec8ff); }
+      35%  { filter: drop-shadow(0 0 20px #7ec8ff) drop-shadow(0 0 40px rgba(120,180,255,0.7)); }
+      100% { filter: drop-shadow(0 0 7px rgba(120,180,255,0.45)); }
+    }
+    .fake-rare-sparkle { animation: fake-rare-entry 1s ease-out forwards; }
+    .fake-rare-glow    { filter: drop-shadow(0 0 7px rgba(120,180,255,0.45)); }
+
+    /* ── GAME AREA ───────────────────────────────────────── */
+    #game-area {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: linear-gradient(180deg, #090914 0%, #0d0d1a 60%, #0d0d0d 100%);
+      cursor: default;
+    }
+
+    /* ── PER-LEVEL BACKGROUNDS ───────────────────────────── */
+    #game-area.bg-color-splash {
+      background:
+        radial-gradient(ellipse 60% 50% at 15% 15%, rgba(214,61,141,0.35) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 55% at 50% 35%, rgba(124,77,209,0.30) 0%, transparent 60%),
+        radial-gradient(ellipse 55% 50% at 85% 30%, rgba(64,179,164,0.28) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 55% at 80% 85%, rgba(224,194,76,0.22) 0%, transparent 60%),
+        #0c0c10;
+    }
+    #game-area.bg-bw {
+      background:
+        radial-gradient(ellipse 70% 60% at 50% 20%, rgba(255,255,255,0.07) 0%, transparent 65%),
+        radial-gradient(ellipse 60% 50% at 80% 80%, rgba(255,255,255,0.04) 0%, transparent 60%),
+        linear-gradient(180deg, #141416 0%, #0d0d0e 60%, #060607 100%);
+    }
+    #game-area.bg-switzerland {
+      background:
+        radial-gradient(ellipse 80% 50% at 50% 0%, rgba(108,160,196,0.30) 0%, transparent 65%),
+        radial-gradient(ellipse 70% 55% at 20% 100%, rgba(63,108,41,0.35) 0%, transparent 65%),
+        radial-gradient(ellipse 70% 55% at 85% 100%, rgba(139,155,116,0.28) 0%, transparent 65%),
+        linear-gradient(180deg, #0d1820 0%, #0d130f 60%, #0a0d09 100%);
+    }
+    #game-area.bg-art {
+      background:
+        radial-gradient(ellipse 70% 55% at 50% 10%, rgba(166,115,78,0.30) 0%, transparent 65%),
+        radial-gradient(ellipse 65% 55% at 15% 90%, rgba(112,78,53,0.32) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 90% 85%, rgba(166,115,78,0.18) 0%, transparent 60%),
+        linear-gradient(180deg, #15110d 0%, #100d0a 60%, #0a0807 100%);
+    }
+
+    /* ── FALLING ITEMS ───────────────────────────────────── */
+    .fall-item {
+      position: absolute;
+      cursor: pointer;
+      transform-origin: center center;
+      will-change: transform, top;
+      filter: drop-shadow(0 6px 16px rgba(0,0,0,0.5));
+      transition: filter 0.15s;
+    }
+    .fall-item:hover {
+      filter: drop-shadow(0 0 20px rgba(251,146,60,0.6));
+    }
+    .fall-item svg { display: block; pointer-events: none; }
+
+    /* Catch animation */
+    @keyframes pop-catch {
+      0%   { transform: scale(1)   rotate(var(--r)); opacity: 1; }
+      35%  { transform: scale(1.6) rotate(var(--r)); opacity: 1; filter: drop-shadow(0 0 30px var(--orange)); }
+      100% { transform: scale(0)   rotate(var(--r)); opacity: 0; }
+    }
+    .catching { animation: pop-catch 0.38s ease-out forwards; pointer-events: none; }
+
+    /* Wrong-click animation */
+    @keyframes shake-wrong {
+      0%,100% { transform: translateX(0)    rotate(var(--r)); }
+      20%     { transform: translateX(-10px) rotate(var(--r)); filter: drop-shadow(0 0 16px var(--red)); }
+      60%     { transform: translateX( 10px) rotate(var(--r)); filter: drop-shadow(0 0 16px var(--red)); }
+    }
+    .wrong-hit { animation: shake-wrong 0.32s ease-out; }
+
+    /* ── FLOATING FEEDBACK ───────────────────────────────── */
+    .float-txt {
+      position: fixed;
+      font-size: 15px;
+      font-weight: 800;
+      font-family: 'Space Grotesk', sans-serif;
+      pointer-events: none;
+      animation: float-up 0.9s ease-out forwards;
+      z-index: 99;
+      white-space: nowrap;
+    }
+    .float-txt.ok  { color: var(--orange); }
+    .float-txt.bad { color: var(--red); font-size: 20px; font-weight: 900; animation-duration: 1.8s; }
+    @keyframes float-up {
+      0%   { opacity: 1; transform: translateY(0); }
+      60%  { opacity: 1; transform: translateY(-30px); }
+      100% { opacity: 0; transform: translateY(-70px); }
+    }
+
+    /* ── SCREEN FLASH ────────────────────────────────────── */
+    #flash {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 200;
+      opacity: 0;
+    }
+    @keyframes do-flash { 0% { opacity: 1; } 100% { opacity: 0; } }
+    #flash.on { animation: do-flash 0.35s ease-out forwards; }
+
+    /* ── RESULTS ─────────────────────────────────────────── */
+    #screen-results {
+      overflow-y: auto;
+      background: var(--bg);
+    }
+
+    .results-hero {
+      padding: 40px 32px 28px;
+      border-bottom: 1px solid var(--border);
+    }
+    .r-hero-row {
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .r-status {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+    .r-status.fail { color: var(--red); }
+    .r-status.vibe { color: var(--gold); }
+
+    .r-score-label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.14em; color: var(--muted); margin-bottom: 6px;
+    }
+
+    .r-score {
+      font-size: clamp(36px, 7vw, 60px);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      color: var(--text);
+    }
+    .r-score.fail { color: var(--red); }
+    .r-score.vibe { color: var(--gold); }
+
+    .r-sub {
+      font-size: 14px;
+      color: var(--muted);
+      margin-top: 10px;
+    }
+    .r-sub strong { color: var(--text); }
+
+    .stat-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+      padding-left: 12px;
+      margin-left: 4px;
+    }
+    .stat-chip {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 14px;
+    }
+    .stat-chip-label {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.1em; color: var(--muted);
+    }
+    .stat-chip-value {
+      font-size: 15px; font-weight: 700; color: var(--text); margin-top: 2px;
+    }
+    .stat-chip.gold .stat-chip-value { color: var(--gold); }
+
+    .cards-wrap {
+      padding: 28px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .cards-heading {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+    }
+
+    .cards-heading-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .irl-cta {
+      background: none;
+      border: none;
+      padding: 0;
+      color: var(--orange);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .irl-cta:hover { text-decoration: underline; }
+
+    /* ── IRL MODAL ───────────────────────────────────────── */
+    .irl-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      z-index: 300;
+      cursor: pointer;
+    }
+    .irl-overlay.active { display: flex; }
+
+    .irl-modal {
+      max-width: 480px;
+      max-height: 90vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      cursor: default;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+    }
+    .irl-modal img {
+      width: 100%;
+      border-radius: 12px;
+      display: block;
+    }
+    .irl-caption {
+      font-size: 14px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .cards-row {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    /* Vibe card */
+    .vibe-card {
+      width: 260px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      overflow: hidden;
+    }
+
+    .vc-top {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 18px;
+      border-bottom: 1px solid var(--border);
+    }
+    .vc-name { font-size: 15px; font-weight: 700; margin-bottom: 5px; }
+    .vc-badge {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 3px 9px;
+      border-radius: 100px;
+      border: 1px solid;
+      margin-bottom: 6px;
+    }
+    .vc-pts { font-size: 22px; font-weight: 800; color: var(--orange); }
+
+    .vc-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 13px; }
+    .vc-section {}
+    .vc-lbl { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 4px; }
+    .vc-head { font-size: 13px; font-weight: 700; }
+    .vc-body-txt { font-size: 12px; color: var(--muted); line-height: 1.55; margin-top: 3px; }
+
+    .results-footer {
+      padding: 20px 32px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Trophy tile (compact showcase card) */
+    .trophy-tile {
+      width: 110px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 4px;
+    }
+    .tt-name { font-size: 11px; font-weight: 700; line-height: 1.2; }
+
+    /* ── LEVEL SELECT ───────────────────────────────── */
+    #screen-levels {
+      align-items: center;
+      justify-content: center;
+      gap: 32px;
+      padding: 40px;
+      background: radial-gradient(ellipse 80% 50% at 50% 30%, #0d1a30 0%, #0d0d0d 65%);
+    }
+    .levels-header { text-align: center; }
+    .levels-grid {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .level-card {
+      width: 200px;
+      padding: 28px 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      cursor: pointer;
+      transition: border-color 0.15s, transform 0.12s;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .level-card:hover {
+      border-color: rgba(255,255,255,0.25);
+      transform: translateY(-3px);
+    }
+    .lc-num  { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; }
+    .lc-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .lc-cta  { margin-top: 14px; font-size: 13px; font-weight: 700; color: var(--orange); }
+  </style>
+</head>
+<body>
+
+<div id="flash" style="background:rgba(239,68,68,0.3)"></div>
+
+<!-- ── TITLE ───────────────────────────────────────────────────── -->
+<div id="screen-title" class="screen active">
+  <div class="title-logo">Vibe <em>Drop</em></div>
+
+  <div class="title-tagline">Catch your vibe, one Swatch watch at a time.</div>
+
+  <div class="title-howto">Click the Swatches to catch them before time runs out.</div>
+
+  <button class="btn" onclick="selectLevel(0)">Start game</button>
+</div>
+
+<!-- ── LEVEL SELECT ─────────────────────────────────────────────────── -->
+<div id="screen-levels" class="screen">
+  <div class="levels-header">
+    <div class="title-logo" style="font-size:clamp(28px,6vw,48px)">Choose <em>Level</em></div>
+  </div>
+  <div class="levels-grid">
+    <div class="level-card" onclick="selectLevel(0)">
+      <div class="lc-num">Color Splash</div>
+      <div class="lc-meta">4 watches · +1 rare (required) · catch them all</div>
+      <div class="lc-cta">Play →</div>
+    </div>
+    <div class="level-card" onclick="selectLevel(1)">
+      <div class="lc-num">Black &amp; White</div>
+      <div class="lc-meta">4 watches · +1 rare (required) · catch them all</div>
+      <div class="lc-cta">Play →</div>
+    </div>
+    <div class="level-card" onclick="selectLevel(2)">
+      <div class="lc-num">Art Museum</div>
+      <div class="lc-meta">3 watches · +1 rare (required) · catch them all</div>
+      <div class="lc-cta">Play →</div>
+    </div>
+    <div class="level-card" onclick="selectLevel(3)">
+      <div class="lc-num">Switzerland</div>
+      <div class="lc-meta">3 watches · +1 rare (required) · catch them all</div>
+      <div class="lc-cta">Play →</div>
+    </div>
+  </div>
+  <button class="btn ghost" onclick="showScreen('title')" style="margin-top:8px">← Back</button>
+</div>
+
+<!-- ── GAME ────────────────────────────────────────────────────── -->
+<div id="screen-game" class="screen">
+  <div id="game-hud">
+    <div class="hud-col">
+      <div class="hud-label">Level</div>
+      <div class="hud-val" id="hud-level-title">Colorful</div>
+    </div>
+    <div id="hud-timer">0:50</div>
+    <div class="hud-col" style="text-align:right">
+      <div class="hud-label">Caught</div>
+      <div class="hud-val"><span id="hud-count">0</span><span id="hud-total" style="color:var(--muted)">/4</span></div>
+    </div>
+  </div>
+  <div id="game-area"></div>
+</div>
+
+<!-- ── RESULTS ─────────────────────────────────────────────────── -->
+<div id="screen-results" class="screen">
+  <div class="results-hero">
+    <div class="r-hero-row">
+      <div class="r-hero-main">
+        <div class="r-status" id="r-status">Level Complete</div>
+        <div class="r-score-label" id="r-score-label" style="display:none">Total Run Score</div>
+        <div class="r-score" id="r-score">0 pts</div>
+      </div>
+      <div class="stat-row" id="r-stats"></div>
+    </div>
+    <div class="r-sub" id="r-sub"></div>
+  </div>
+  <div class="results-footer" id="results-footer">
+    <button class="btn" onclick="startGame()">Replay Level</button>
+  </div>
+  <div class="cards-wrap">
+    <div class="cards-heading" id="r-caught-label">Vibes caught</div>
+    <div class="cards-row" id="r-caught"></div>
+  </div>
+  <div class="cards-wrap" id="r-showcase-wrap" style="display:none">
+    <div class="cards-heading-row">
+      <div class="cards-heading">Your Vibe Collection</div>
+      <button class="irl-cta" onclick="openIrlModal()">See it IRL →</button>
+    </div>
+    <div class="cards-row" id="r-showcase"></div>
+  </div>
+</div>
+
+<!-- ── IRL COLLECTION MODAL ────────────────────────────────────── -->
+<div class="irl-overlay" id="irl-overlay" onclick="closeIrlModal()">
+  <div class="irl-modal" onclick="event.stopPropagation()">
+    <div class="irl-caption">The real Swatches are somewhere in my actual (partial) collection. Can you spot them all?</div>
+    <img src="Background/collection-1.jpg" alt="My real Swatch collection, part 1">
+    <img src="Background/collection-2.jpg" alt="My real Swatch collection, part 2">
+  </div>
+</div>
+
+<script>
+// ─── WATCH DEFINITIONS ────────────────────────────────────────────────────────
+
+const WATCHES = {
+  'arnould-fashions': {
+    name: 'Arnould Fashions', rarity: 'special', points: 25, color: '#1e88e5',
+    outfit:  { headline: 'Graffiti is a love language.', scene: 'Vintage tee with the graphic that started a conversation. Black, white, and one loud accessory.' },
+    moment:  { headline: 'Gallery opening you were not on the list for.', text: "You got in anyway. You always do." },
+    music:   { vibe: 'NYC art-punk with a sense of humor.', energy: 'Deliberately chaotic.' },
+  },
+  'candy-hearts': {
+    name: 'Candy Hearts', rarity: 'special', points: 25, color: '#FB923C',
+    outfit:  { headline: 'Y2K never left.', scene: 'Pink mini skirt, platform sneakers, three butterfly clips minimum.' },
+    moment:  { headline: 'The group chat is buzzing.', text: "Everyone wants to know where you got it. You're not telling." },
+    music:   { vibe: 'Bubblegum hyperpop.', energy: 'Chaotic good.' },
+  },
+  'mood-of-the-day': {
+    name: 'Mood of the Day', rarity: 'common', points: 25, color: '#94A3B8',
+    outfit:  { headline: 'Quiet confidence.', scene: 'All white. Head to toe. The kind of nothing that says everything.' },
+    moment:  { headline: 'No thoughts, just vibes.', text: 'You woke up in a good mood for no reason. This is that energy.' },
+    music:   { vibe: 'Lo-fi that actually slaps.', energy: 'Deceptively chill.' },
+  },
+  'chicken-run': {
+    name: 'Chicken Run', rarity: 'common', points: 25, color: '#94A3B8',
+    outfit:  { headline: 'Dressed down, dialed in.', scene: 'Oversized blazer, white tee, the kind of outfit that tries not to try.' },
+    moment:  { headline: 'Peak Monday energy.', text: "Coffee's cold. You don't care. This watch is doing the heavy lifting." },
+    music:   { vibe: 'Sophisticated background noise.', energy: 'Low and deliberate.' },
+  },
+  'skinalliage': {
+    name: 'Skinalliage', rarity: 'special', points: 25, color: '#b8bec4',
+    outfit:  { headline: 'Nothing extra. Just right.', scene: 'Black everything. No logos, no noise. The watch is the only detail that matters.' },
+    moment:  { headline: '11pm, still dressed.', text: "You forgot you were wearing it. That is the point." },
+    music:   { vibe: 'Minimal techno in a very dark room.', energy: 'Controlled and exact.' },
+  },
+  'mission-to-uranus': {
+    name: 'Mission to Uranus', rarity: 'limited', points: 75, color: '#9dcfe8',
+    easterEgg: { headline: 'You queued for four hours.', text: 'Worth it. Obviously.', subtext: 'Omega × Swatch' },
+    outfit:  { headline: 'Dressed for a mission.', scene: 'All-white technical wear. The watch is the only reason anyone is looking.' },
+    moment:  { headline: 'The collab that broke the internet.', text: "You have the receipt. And the box. And the strap bag." },
+    music:   { vibe: 'Cinematic space ambient that gives you chills.', energy: 'Houston, we are go.' },
+  },
+  'banana-shake': {
+    name: 'Banana Shake', rarity: 'common', points: 25, color: '#eab308',
+    outfit:  { headline: 'Dressed for a good time.', scene: 'Something yellow. Something you can move in. The energy is contagious.' },
+    moment:  { headline: 'Farmers market, 10am.', text: 'You bought too much fruit. No regrets.' },
+    music:   { vibe: 'Feel-good indie pop.', energy: 'Ripe and ready.' },
+  },
+  'tet-wrist': {
+    name: 'Tet-Wrist', rarity: 'special', points: 25, color: '#16a34a',
+    outfit:  { headline: 'Every color, all at once.', scene: 'Clashing prints. The kind of outfit that takes confidence to pull off.' },
+    moment:  { headline: 'Game on.', text: "You made it fit. You always make it fit." },
+    music:   { vibe: '8-bit that somehow goes hard.', energy: 'Block by block.' },
+  },
+  'color-palette': {
+    name: 'Color Palette', rarity: 'special', points: 25, color: '#f97316',
+    outfit:  { headline: 'Art class never ended.', scene: 'Every color on your body. The outfit IS the palette.' },
+    moment:  { headline: 'You mix, you match, you go.', text: "No rules. Just range." },
+    music:   { vibe: 'Studio session playlist, all genres at once.', energy: 'Chromatically chaotic.' },
+  },
+  'what-if-micro': {
+    name: 'What If... Micro?', rarity: 'limited', points: 75, color: '#4dccc0',
+    easterEgg: { headline: 'Shareholders only.', text: 'QR code goes to the annual report. You scanned it anyway.', subtext: 'Swatch Group AG' },
+    outfit:  { headline: 'The most niche flex.', scene: 'Nobody knows what it means. That is entirely the point.' },
+    moment:  { headline: 'You own a piece of Swatch.', text: 'Technically more than one.' },
+    music:   { vibe: 'Swiss jazz. Extremely precise.', energy: 'Dividend energy.' },
+  },
+  'mirror-swatch-mickey': {
+    name: 'Mirror Swatch Mickey', rarity: 'limited', points: 75, color: '#e53935',
+    easterEgg: { headline: 'Mickey Hirst in the wild.', text: 'Spot painting. Spots on a wrist. Damien would approve.', subtext: 'Swatch × Disney × Damien Hirst' },
+    outfit:  { headline: 'The collab nobody predicted.', scene: 'Disney meets spot painting. You wear it ironically. And also sincerely.' },
+    moment:  { headline: 'Everyone asked where you got it.', text: 'You let them wonder.' },
+    music:   { vibe: 'Pop art and pop music in the same playlist.', energy: 'Deliberately playful.' },
+  },
+  'scene-de-zuri': {
+    name: 'Scenes de Zuri', rarity: 'special', points: 25, color: '#c62828',
+    outfit:  { headline: 'Zürich energy.', scene: 'Bold red, layered graphics. The watch tells a whole story before you say a word.' },
+    moment:  { headline: 'Lakeside in Zürich, mid-afternoon.', text: 'The cow on your wrist feels appropriate somehow.' },
+    music:   { vibe: 'Swiss house music that absolutely slaps.', energy: 'Civic pride.' },
+  },
+  'bout-du-lac': {
+    name: 'Bout du Lac', rarity: 'special', points: 25, color: '#90bcd4',
+    outfit:  { headline: 'Lake light, every day.', scene: 'Soft blues. Something linen. You are in Geneva and it shows.' },
+    moment:  { headline: 'Watching the Jet d\'Eau from the shore.', text: 'You have been here a hundred times. You still stop.' },
+    music:   { vibe: 'French-Swiss electronica, somehow elegant.', energy: 'Lakeside.' },
+  },
+  'nachster-halt': {
+    name: 'Nächster Halt', rarity: 'special', points: 25, color: '#a0d0d8',
+    outfit:  { headline: 'Alpine in transit.', scene: 'Technical layers. The kind of outfit made for altitude and altitude only.' },
+    moment:  { headline: 'On the Jungfraubahn, heading up.', text: 'You did not know ice could be this color.' },
+    music:   { vibe: 'Ambient that sounds like thin air.', energy: 'Precisely on schedule.' },
+  },
+  'swiss-ride': {
+    name: 'Swiss Ride', rarity: 'limited', points: 75, color: '#88b4cc',
+    easterEgg: { headline: 'Shareholders only.', text: 'You own stock in a watchmaker. This is correct.', subtext: 'Swatch Group AG' },
+    outfit:  { headline: 'Matterhorn on the wrist.', scene: 'Everything else is understated. The watch does the talking.' },
+    moment:  { headline: 'You can see the Matterhorn from here.', text: 'Technically, if you squint.' },
+    music:   { vibe: 'Swiss folk that somehow sounds modern.', energy: 'Peak elevation.' },
+  },
+  'hope-ii': {
+    name: 'Hope II', rarity: 'collectible', points: 25, color: '#8060a8',
+    outfit:  { headline: 'You wore a painting.', scene: 'Print-on-print, but only if it is art. This is the exception.' },
+    moment:  { headline: 'The museum gift shop was necessary.', text: 'You told yourself you were just browsing.' },
+    music:   { vibe: 'Arvo Pärt, or something you cannot name but want to.', energy: 'Achingly beautiful.' },
+  },
+  'starry-night': {
+    name: 'Starry Night', rarity: 'collectible', points: 25, color: '#2a7080',
+    outfit:  { headline: 'Midnight blue, head to toe.', scene: 'Something that moves when you walk. Something that swirls.' },
+    moment:  { headline: 'Standing outside at 11pm looking up.', text: 'You understood it then.' },
+    music:   { vibe: 'Post-rock that makes you feel something vast.', energy: 'Overwhelming, but in a good way.' },
+  },
+  'le-fils': {
+    name: 'Le Fils de l\'Homme', rarity: 'collectible', points: 25, color: '#5a9840',
+    outfit:  { headline: 'The trench coat. But make it a statement.', scene: 'Classic silhouette, unsettling detail. People will look twice.' },
+    moment:  { headline: 'You answered a question with a question.', text: 'René would have approved.' },
+    music:   { vibe: 'Jazz that has a secret.', energy: 'Deliberately mysterious.' },
+  },
+  'friandise': {
+    name: 'Friandise', rarity: 'special', points: 25, color: '#a855f7',
+    outfit:  { headline: 'Sweet but not simple.', scene: 'Sparkle, sheer layers, rings on every finger. Dessert as a dress code.' },
+    moment:  { headline: 'The table everyone keeps looking at.', text: "That's yours." },
+    music:   { vibe: 'Glittery pop with a sugar rush.', energy: 'Effervescent.' },
+  },
+};
+
+// ─── WATCH SVGs ───────────────────────────────────────────────────────────────
+// viewBox 44 110 — displayed at 50×125px in game
+
+function makeWatch(id) {
+  const defs = {
+    'arnould-fashions': {
+      strap: '#fff', case_: '#1a1a1a', dial: '#ffffff', hand: '#1e88e5',
+      pat: `<pattern id="crp" patternUnits="userSpaceOnUse" width="12" height="12">
+              <rect width="12" height="12" fill="#fff"/>
+              <circle cx="3"   cy="3"   r="2"   fill="none" stroke="#111" stroke-width="1.2"/>
+              <circle cx="9.5" cy="8"   r="2.5" fill="none" stroke="#111" stroke-width="1.2"/>
+              <circle cx="5"   cy="9.5" r="1"   fill="#111"/>
+              <path d="M7.5 1.5 Q10 1 11 3.5" stroke="#111" stroke-width="1" fill="none" stroke-linecap="round"/>
+              <path d="M0.5 7 Q2 9.5 4.5 8"   stroke="#111" stroke-width="1" fill="none" stroke-linecap="round"/>
+            </pattern>`,
+      strapF: 'url(#crp)', dialF: '#ffffff',
+      dialX: `<rect x="14" y="14" width="16" height="5" rx="2.2" fill="#f9ca24"/>
+              <path d="M9 49 Q22 38 35 49 Q28 46 22 46 Q16 46 9 49 Z" fill="#e53935" opacity="0.85"/>
+              <path d="M9 55 Q22 66 35 55 Q28 58 22 58 Q16 58 9 55 Z" fill="#f9ca24" opacity="0.85"/>
+              <circle cx="15" cy="51" r="2.5" fill="#111"/>
+              <circle cx="29" cy="53" r="2.5" fill="#111"/>`
+    },
+    'chicken-run': {
+      strap: '#e8e4de', case_: '#d8d4ce', dial: '#f0ede8', hand: '#1a1a1a',
+      pat: `<pattern id="htp" patternUnits="userSpaceOnUse" width="5" height="5">
+              <rect width="5" height="5" fill="#eeecea"/>
+              <rect x="0" y="0" width="2.5" height="1.25" fill="#1a1a1a"/>
+              <rect x="0" y="1.25" width="1.25" height="1.25" fill="#1a1a1a"/>
+              <rect x="0" y="2.5" width="5" height="1.25" fill="#1a1a1a"/>
+              <rect x="2.5" y="3.75" width="2.5" height="1.25" fill="#1a1a1a"/>
+            </pattern>`,
+      strapF: 'url(#htp)', dialF: 'url(#htp)'
+    },
+    'skinalliage': {
+      strap: '#1a1a1a', case_: '#b8bec4', dial: '#1a1a1a', hand: '#d0d4d8',
+      pat: '', strapF: '#1a1a1a', dialF: '#1a1a1a', strapStroke: '#707880',
+      dialX: `<circle cx="22" cy="52" r="11.5" fill="none" stroke="#d0d4d8" stroke-width="0.6" stroke-dasharray="1.5 3" opacity="0.7"/>
+              <text x="22" y="44.5" text-anchor="middle" font-size="4" fill="#c0c4c8" font-family="serif" opacity="0.9">XII</text>
+              <text x="22" y="63"   text-anchor="middle" font-size="4" fill="#c0c4c8" font-family="serif" opacity="0.9">VI</text>`
+    },
+    'mission-to-uranus': {
+      strap: '#f2f2f2', case_: '#9dcfe8', dial: '#c0e4f4', hand: '#ffffff',
+      pat: '', strapF: '#f2f2f2', strapF2: '#f2f2f2', dialF: '#c0e4f4',
+      dialX: `<line x1="16" y1="12" x2="28" y2="12" stroke="#c8c8c8" stroke-width="0.7" stroke-dasharray="2 2.5" opacity="0.9"/>
+              <line x1="16" y1="16" x2="28" y2="16" stroke="#c8c8c8" stroke-width="0.7" stroke-dasharray="2 2.5" opacity="0.9"/>
+              <circle cx="22" cy="52" r="13.5" fill="none" stroke="#fff" stroke-width="0.8" opacity="0.5" stroke-dasharray="1.5 1.5"/>
+              <circle cx="15" cy="49" r="4" fill="#9cc8e0" opacity="0.9"/>
+              <circle cx="29" cy="49" r="4" fill="#9cc8e0" opacity="0.9"/>
+              <circle cx="22" cy="58" r="4" fill="#9cc8e0" opacity="0.9"/>
+              <text x="22" y="45.5" text-anchor="middle" font-size="4" fill="#fff" opacity="0.7" font-family="serif">Ω</text>`
+    },
+    'candy-hearts': {
+      strap: '#f472b6', case_: '#ec4899', dial: '#fce7f3', hand: '#831843',
+      pat: '', strapF: '#f472b6', dialF: '#fce7f3',
+      dialX: `<text x="22" y="51" text-anchor="middle" font-size="8" fill="#f472b6">♡</text>
+              <text x="16" y="57" font-size="5" fill="#ec4899">♡</text>
+              <text x="27" y="57" font-size="5" fill="#ec4899">♡</text>`
+    },
+    'mood-of-the-day': {
+      strap: '#f5f5f3', case_: '#ebebea', dial: '#ffffff', hand: '#2a2a2a',
+      pat: '', strapF: '#f5f5f3', dialF: '#fff'
+    },
+    'banana-shake': {
+      strap: '#f0f0e0', case_: '#3a8a28', dial: '#e2e830', hand: '#1a3a00',
+      pat: `<pattern id="banp" patternUnits="userSpaceOnUse" width="14" height="18">
+              <rect width="14" height="18" fill="#f8f8ec"/>
+              <path d="M2 14 Q5 8 8 10 Q11 12 10 16" stroke="#e8d820" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              <path d="M4 4 Q7 0 10 3 Q12 6 9 8" stroke="#b8cc18" stroke-width="2" fill="none" stroke-linecap="round"/>
+            </pattern>`,
+      strapF: 'url(#banp)', dialF: '#e2e830',
+      dialX: `<text x="22" y="46" text-anchor="middle" font-size="5" fill="#1a3a00" font-weight="700">12</text>
+              <text x="22" y="63" text-anchor="middle" font-size="5" fill="#1a3a00" font-weight="700">6</text>`
+    },
+    'tet-wrist': {
+      strap: '#f0f0f0', case_: '#1a5c28', dial: '#ffffff', hand: '#111',
+      pat: `<pattern id="tetp" patternUnits="userSpaceOnUse" width="14" height="14">
+              <rect x="0"  y="0"  width="5"  height="4"  fill="#e53935"/>
+              <rect x="5"  y="0"  width="5"  height="4"  fill="#f9ca24"/>
+              <rect x="10" y="0"  width="4"  height="7"  fill="#43a047"/>
+              <rect x="0"  y="4"  width="5"  height="5"  fill="#7b1fa2"/>
+              <rect x="5"  y="4"  width="5"  height="5"  fill="#1e88e5"/>
+              <rect x="0"  y="9"  width="4"  height="5"  fill="#e91e63"/>
+              <rect x="4"  y="9"  width="6"  height="5"  fill="#f57c00"/>
+              <rect x="10" y="7"  width="4"  height="7"  fill="#00acc1"/>
+            </pattern>`,
+      strapF: 'url(#tetp)', dialF: '#fff',
+      dialX: `<path d="M10 52 L22 52 L22 44 L34 44" stroke="#e53935" stroke-width="1.5" fill="none" opacity="0.4"/>
+              <circle cx="16" cy="52" r="4" fill="#f9ca24" opacity="0.35"/>
+              <circle cx="28" cy="52" r="4" fill="#43a047" opacity="0.35"/>
+              <circle cx="22" cy="46" r="4" fill="#7b1fa2" opacity="0.35"/>
+              <circle cx="22" cy="58" r="4" fill="#1e88e5" opacity="0.35"/>`
+    },
+    'color-palette': {
+      strap: '#f97316', case_: '#b8d400', dial: '#7dd3fc', hand: '#ffffff',
+      pat: '', strapF: '#f97316', strapF2: '#ec4899', dialF: '#7dd3fc',
+      dialX: `<ellipse cx="16" cy="48" rx="6" ry="5" fill="#f97316" opacity="0.9"/>
+              <ellipse cx="28" cy="47" rx="5" ry="5" fill="#ec4899" opacity="0.9"/>
+              <ellipse cx="15" cy="57" rx="5" ry="4.5" fill="#f9ca24" opacity="0.9"/>
+              <ellipse cx="29" cy="57" rx="5" ry="4.5" fill="#1e88e5" opacity="0.85"/>
+              <circle  cx="22" cy="52" r="4"  fill="#b8d400" opacity="0.95"/>`
+    },
+    'what-if-micro': {
+      strap: '#c8185c', case_: '#f0f0f0', dial: '#4dccc0', hand: '#c8b020',
+      pat: `<pattern id="wim" patternUnits="userSpaceOnUse" width="14" height="14">
+              <rect width="14" height="14" fill="#c8185c"/>
+              <circle cx="7" cy="7" r="2.5" fill="#4dccc0"/>
+              <ellipse cx="7"  cy="3"  rx="1.5" ry="2"   fill="#4dccc0" opacity="0.9"/>
+              <ellipse cx="7"  cy="11" rx="1.5" ry="2"   fill="#4dccc0" opacity="0.9"/>
+              <ellipse cx="3"  cy="7"  rx="2"   ry="1.5" fill="#4dccc0" opacity="0.9"/>
+              <ellipse cx="11" cy="7"  rx="2"   ry="1.5" fill="#4dccc0" opacity="0.9"/>
+            </pattern>`,
+      strapF: 'url(#wim)', strapF2: '#201020', dialF: '#4dccc0', strapStroke: '#6a5a68',
+      dialX: `<!-- square white bioceramic case -->
+              <rect x="5" y="35" width="34" height="34" rx="2" fill="#f0f0f0"/>
+              <rect x="5" y="35" width="34" height="34" rx="2" fill="none" stroke="#d0d0d0" stroke-width="0.8"/>
+              <!-- mint square dial -->
+              <rect x="7" y="37" width="30" height="30" rx="1" fill="#4dccc0"/>
+              <!-- dial line motif -->
+              <line x1="7"  y1="37" x2="37" y2="67" stroke="#38bab0" stroke-width="1" opacity="0.35"/>
+              <line x1="37" y1="37" x2="7"  y2="67" stroke="#38bab0" stroke-width="1" opacity="0.35"/>
+              <!-- QR code white background -->
+              <rect x="11" y="41" width="22" height="22" rx="1" fill="white" opacity="0.85"/>
+              <!-- QR corner: top-left -->
+              <rect x="12" y="42" width="6" height="6" fill="#111"/>
+              <rect x="13" y="43" width="4" height="4" fill="white"/>
+              <rect x="14" y="44" width="2" height="2" fill="#111"/>
+              <!-- QR corner: top-right -->
+              <rect x="25" y="42" width="6" height="6" fill="#111"/>
+              <rect x="26" y="43" width="4" height="4" fill="white"/>
+              <rect x="27" y="44" width="2" height="2" fill="#111"/>
+              <!-- QR corner: bottom-left -->
+              <rect x="12" y="55" width="6" height="6" fill="#111"/>
+              <rect x="13" y="56" width="4" height="4" fill="white"/>
+              <rect x="14" y="57" width="2" height="2" fill="#111"/>
+              <!-- QR data -->
+              <rect x="20" y="43" width="2" height="2" fill="#111"/>
+              <rect x="23" y="43" width="2" height="2" fill="#111"/>
+              <rect x="20" y="46" width="3" height="2" fill="#111"/>
+              <rect x="20" y="49" width="2" height="2" fill="#111"/>
+              <rect x="23" y="49" width="2" height="2" fill="#111"/>
+              <rect x="20" y="52" width="2" height="2" fill="#111"/>
+              <rect x="23" y="52" width="3" height="2" fill="#111"/>
+              <rect x="20" y="55" width="2" height="2" fill="#111"/>
+              <rect x="25" y="55" width="2" height="2" fill="#111"/>
+              <rect x="20" y="58" width="4" height="2" fill="#111"/>
+              <rect x="25" y="58" width="2" height="2" fill="#111"/>`
+    },
+    'mirror-swatch-mickey': {
+      strap: '#f8f8f8', case_: '#d0d0d0', dial: '#d8d8d8', hand: '#222',
+      pat: `<pattern id="mmp" patternUnits="userSpaceOnUse" width="14" height="5">
+              <rect width="14" height="5" fill="#f8f8f8"/>
+              <rect width="14" height="2.5" fill="#111" opacity="0.9"/>
+            </pattern>`,
+      strapF: 'url(#mmp)', strapF2: '#f5c020', dialF: '#d8d8d8',
+      dialX: `<!-- Mickey silhouette — all elements fit within dial r=14 at center (22,52) -->
+              <circle cx="16" cy="47" r="3.5" fill="#111" opacity="0.9"/>
+              <circle cx="28" cy="47" r="3.5" fill="#111" opacity="0.9"/>
+              <circle cx="22" cy="52" r="6"   fill="#f5f0e8" opacity="0.92"/>
+              <circle cx="20" cy="51" r="1.5" fill="#111"/>
+              <circle cx="24" cy="51" r="1.5" fill="#111"/>
+              <ellipse cx="22" cy="54" rx="2.5" ry="1.2" fill="#111" opacity="0.5"/>`
+    },
+    'hope-ii': {
+      strap: '#e8a060', case_: '#e4e0d8', dial: '#c8d4a8', hand: '#8B6010',
+      pat: `<pattern id="klitp" patternUnits="userSpaceOnUse" width="14" height="14">
+              <rect width="14" height="14" fill="#e8a060"/>
+              <circle cx="3.5" cy="3.5" r="3.5" fill="#8060a8" opacity="0.85"/>
+              <circle cx="10.5" cy="9.5" r="3"   fill="#f0a820" opacity="0.85"/>
+              <circle cx="3"   cy="11"  r="2.5"  fill="#5a9058" opacity="0.8"/>
+              <circle cx="12"  cy="2"   r="2"    fill="#cc5848" opacity="0.75"/>
+            </pattern>`,
+      strapF: 'url(#klitp)', dialF: '#c8d4a8',
+      dialX: `<rect x="13" y="13" width="18" height="5" rx="2.5" fill="#c05818"/>
+              <circle cx="22" cy="48" r="6"  fill="#8060a8" opacity="0.45"/>
+              <circle cx="22" cy="56" r="5"  fill="#f0a820" opacity="0.35"/>
+              <path d="M10 52 Q16 46 22 52 Q28 58 34 52" stroke="#5a9058" stroke-width="2" fill="none" opacity="0.5"/>`
+    },
+    'scene-de-zuri': {
+      strap: '#c62828', case_: '#c62828', dial: '#1565c0', hand: '#ffffff',
+      pat: `<pattern id="zurip_t" patternUnits="userSpaceOnUse" width="14" height="14">
+              <rect width="14" height="7"  fill="#1565c0"/>
+              <rect y="7"  width="14" height="7"  fill="#e67c20"/>
+            </pattern>
+            <pattern id="zurip_b" patternUnits="userSpaceOnUse" width="14" height="21">
+              <rect width="14" height="7"  fill="#2e7d32"/>
+              <rect y="7"  width="14" height="7"  fill="#c62828"/>
+              <rect y="14" width="14" height="7"  fill="#1565c0"/>
+            </pattern>`,
+      strapF: 'url(#zurip_t)', strapF2: 'url(#zurip_b)', dialF: '#1565c0',
+      dialX: `<!-- keeper ring -->
+              <rect x="13" y="13" width="18" height="5" rx="2.5" fill="#c62828"/>
+              <text x="22" y="17" text-anchor="middle" font-size="3" fill="#fff">Greetings from</text>
+              <!-- cow horns -->
+              <path d="M16 46 Q14 42 17 41" stroke="#888" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              <path d="M28 46 Q30 42 27 41" stroke="#888" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              <!-- cow head -->
+              <ellipse cx="22" cy="52" rx="8" ry="6" fill="#b8b8b8"/>
+              <!-- muzzle -->
+              <ellipse cx="22" cy="55" rx="5" ry="3.5" fill="#d4c4a0"/>
+              <!-- eyes -->
+              <circle cx="18.5" cy="50" r="1.5" fill="#333"/>
+              <circle cx="25.5" cy="50" r="1.5" fill="#333"/>
+              <!-- nose dots -->
+              <circle cx="20.5" cy="56" r="0.8" fill="#8a7060"/>
+              <circle cx="23.5" cy="56" r="0.8" fill="#8a7060"/>
+              <!-- cowbell -->
+              <path d="M20 58 Q20 63 22 64 Q24 63 24 58" fill="#c8a020"/>
+              <!-- dial numerals -->
+              <text x="22" y="42" text-anchor="middle" font-size="3.5" fill="#fff" font-weight="700">12</text>
+              <text x="34" y="54" text-anchor="middle" font-size="3.5" fill="#fff" font-weight="700">3</text>
+              <text x="22" y="65" text-anchor="middle" font-size="3.5" fill="#fff" font-weight="700">6</text>
+              <text x="10" y="54" text-anchor="middle" font-size="3.5" fill="#fff" font-weight="700">9</text>`
+    },
+    'bout-du-lac': {
+      strap: '#b8d8ec', case_: '#90bcd4', dial: '#e8ece0', hand: '#e87020',
+      pat: `<pattern id="boulp" patternUnits="userSpaceOnUse" width="14" height="20">
+              <rect width="14" height="20" fill="#b8d8ec"/>
+              <path d="M0 10 Q7 8 14 10" stroke="#c8e4f4" stroke-width="1.5" fill="none" opacity="0.6"/>
+              <path d="M0 16 Q7 14 14 16" stroke="#c8e4f4" stroke-width="1"   fill="none" opacity="0.4"/>
+            </pattern>`,
+      strapF: 'url(#boulp)', dialF: '#e8ece0',
+      dialX: `<!-- keepers: purple + yellow Geneva label -->
+              <rect x="13" y="11" width="18" height="4"   rx="2"   fill="#8060a8"/>
+              <rect x="13" y="15" width="18" height="5"   rx="2.5" fill="#f0c020"/>
+              <text x="22" y="19.5" text-anchor="middle" font-size="4" fill="#2a2a2a" font-style="italic">Geneva</text>
+              <!-- lake water -->
+              <path d="M8 60 Q22 58 36 60 L36 66 Q22 64 8 66 Z" fill="#a8d0e8" opacity="0.7"/>
+              <!-- Jet d'Eau fountain -->
+              <path d="M22 60 Q21 52 22 40 Q23 52 22 60" fill="#c8e8f8" opacity="0.9"/>
+              <ellipse cx="22" cy="40" rx="2.5" ry="4" fill="#daf0fc" opacity="0.8"/>
+              <!-- mountain silhouette -->
+              <path d="M8 58 L16 48 L24 54 L32 46 L38 58" stroke="#b0c0d0" stroke-width="1" fill="none" opacity="0.6"/>
+              <!-- buildings -->
+              <rect x="11" y="54" width="5" height="6" rx="1" fill="#b0a8a0" opacity="0.7"/>
+              <rect x="30" y="55" width="5" height="5" rx="1" fill="#b0a8a0" opacity="0.7"/>`
+    },
+    'nachster-halt': {
+      strap: '#a0d0d8', case_: '#b4d8e0', dial: '#c4e4ec', hand: '#e03030',
+      pat: `<pattern id="nhaltp" patternUnits="userSpaceOnUse" width="14" height="18">
+              <rect width="14" height="18" fill="#a0d0d8"/>
+              <path d="M0 10 Q3.5 4 7 10 Q10.5 4 14 10" fill="white" opacity="0.65"/>
+              <path d="M2 16 Q5 12 8 16"               fill="white" opacity="0.45"/>
+            </pattern>
+            <pattern id="nhaltb" patternUnits="userSpaceOnUse" x="15" y="71" width="14" height="38">
+              <rect width="14" height="38" fill="#a0d0d8"/>
+              <path d="M0 8  Q3.5 2  7 8  Q10.5 2  14 8"  fill="white" opacity="0.65"/>
+              <path d="M0 22 Q3.5 16 7 22 Q10.5 16 14 22" fill="white" opacity="0.45"/>
+              <path d="M7 0 Q3 8 7 16 Q11 24 7 32 Q4 38 7 38" stroke="#e03030" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+            </pattern>`,
+      strapF: 'url(#nhaltp)', strapF2: 'url(#nhaltb)', dialF: '#c4e4ec',
+      dialX: `<!-- Jungfrau keeper -->
+              <rect x="13" y="13" width="18" height="5" rx="2.5" fill="#1e8aaa"/>
+              <text x="22" y="17" text-anchor="middle" font-size="3.5" fill="#fff">Jungfrau</text>
+              <!-- red winding railway line on top strap (no stop dots) -->
+              <path d="M22 22 Q18 26 22 30 Q26 34 22 38" stroke="#e03030" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+              <!-- glacier/mountain on dial -->
+              <path d="M8 62 L18 44 L22 50 L26 44 L36 62" fill="#a8d8e4" opacity="0.5"/>
+              <path d="M15 62 L22 46 L29 62" fill="white" opacity="0.4"/>`
+    },
+    'swiss-ride': {
+      strap: '#e8f0f8', case_: '#88b4cc', dial: '#dce8f0', hand: '#f0b000',
+      pat: `<pattern id="swrp" patternUnits="userSpaceOnUse" width="14" height="14">
+              <rect width="14" height="14" fill="#f0f4f8"/>
+              <path d="M2 12 L7 4 L12 12 Z" fill="#2e7d32" opacity="0.55"/>
+              <path d="M0 12 L4 8 L8 12" fill="none" stroke="#5090a8" stroke-width="0.8" opacity="0.7"/>
+            </pattern>`,
+      strapF: 'url(#swrp)', dialF: '#dce8f0',
+      dialX: `<!-- Matterhorn triangle — all points verified within dial r=14 -->
+              <path d="M22 38 L13 62 L31 62 Z" fill="#9ab0c0"/>
+              <!-- snow cap -->
+              <path d="M22 38 L18 48 L26 48 Z" fill="white"/>
+              <!-- colorful bands (the Swiss Ride signature) -->
+              <path d="M15 55 Q22 53 29 55" stroke="#1e88e5" stroke-width="2"   fill="none"/>
+              <path d="M14 58 Q22 56 30 58" stroke="#e53935" stroke-width="1.5" fill="none"/>
+              <path d="M14 61 Q22 59 30 61" stroke="#f9ca24" stroke-width="1.5" fill="none"/>`
+    },
+    'starry-night': {
+      strap: '#1a3060', case_: '#1e3565', dial: '#1a3860', hand: '#c8d020',
+      pat: `<pattern id="vgp" patternUnits="userSpaceOnUse" width="16" height="12">
+              <rect width="16" height="12" fill="#1a3060"/>
+              <path d="M0 6 Q4 2 8 6 Q12 10 16 6"    stroke="#2a7080" stroke-width="2.5" fill="none"/>
+              <path d="M0 2 Q4 6 8 2 Q12 -2 16 2"    stroke="#3a8090" stroke-width="2"   fill="none"/>
+              <path d="M0 10 Q4 6 8 10 Q12 14 16 10"  stroke="#1e6070" stroke-width="2"   fill="none"/>
+              <circle cx="3"  cy="9" r="1.2" fill="#c8d430" opacity="0.6"/>
+              <circle cx="13" cy="3" r="0.9" fill="#e0e850" opacity="0.4"/>
+            </pattern>`,
+      strapF: 'url(#vgp)', dialF: '#1a3860',
+      dialX: `<rect x="13" y="13" width="18" height="5" rx="2.5" fill="#f0f0f0"/>
+              <text x="22" y="17" text-anchor="middle" font-size="3.5" fill="#1a3060" font-weight="700">MoMA</text>
+              <path d="M8 50 Q15 44 22 50 Q29 56 36 50"  stroke="#3a9090" stroke-width="2.5" fill="none" opacity="0.7"/>
+              <path d="M8 55 Q15 49 22 55 Q29 61 36 55"  stroke="#2a8080" stroke-width="2"   fill="none" opacity="0.5"/>
+              <circle cx="15" cy="46" r="2"   fill="#c8d430" opacity="0.8"/>
+              <circle cx="29" cy="58" r="1.5" fill="#d0dc40" opacity="0.6"/>`
+    },
+    'le-fils': {
+      strap: '#a8b0b8', case_: '#b8bcbe', dial: '#a0a8b0', hand: '#f0f0f0',
+      pat: '', strapF: '#a8b0b8', strapF2: '#38485a', dialF: '#a0a8b0',
+      dialX: `<rect x="13" y="13" width="18" height="5" rx="2.5" fill="#8a8e94"/>
+              <text x="22" y="17" text-anchor="middle" font-size="3.5" fill="#f0f0f0" font-family="serif" font-style="italic">magritte</text>
+              <!-- Son of Man: suit -->
+              <rect x="15" y="54" width="14" height="10" rx="2" fill="#38485a"/>
+              <rect x="19" y="54" width="6"  height="10" rx="1" fill="#b83030"/>
+              <!-- green apple -->
+              <circle cx="22" cy="49" r="5.5" fill="#5a9840"/>
+              <!-- bowler hat brim + crown -->
+              <ellipse cx="22" cy="43.5" rx="7.5" ry="2.5" fill="#111"/>
+              <rect x="17" y="41"  width="10" height="4"  rx="2" fill="#111"/>`
+    },
+    'friandise': {
+      strap: '#d8d8d8', case_: '#c0c0c0', dial: '#e8e8e8', hand: '#333',
+      pat: `<pattern id="frip" patternUnits="userSpaceOnUse" width="16" height="20">
+              <rect width="16" height="20" fill="#d8d8d8"/>
+              <circle cx="5"  cy="5"  r="3.5" fill="none" stroke="#e53935" stroke-width="1.5"/>
+              <circle cx="12" cy="13" r="3"   fill="none" stroke="#1e88e5" stroke-width="1.5"/>
+              <circle cx="4"  cy="15" r="2.5" fill="none" stroke="#f9ca24" stroke-width="1.2"/>
+              <circle cx="13" cy="4"  r="2"   fill="none" stroke="#43a047" stroke-width="1.2"/>
+            </pattern>`,
+      strapF: 'url(#frip)', dialF: '#e8e8e8',
+      dialX: `<text x="9"  y="57" font-size="7" fill="#1e88e5" font-weight="700">9</text>
+              <text x="19" y="66" font-size="7" fill="#e53935" font-weight="700">6</text>
+              <text x="29" y="57" font-size="7" fill="#000" font-weight="400" opacity="0.4">3</text>`
+    },
+  };
+
+  const d = defs[id] || defs['mood-of-the-day'];
+
+  return `<svg viewBox="0 0 44 110" width="50" height="125" xmlns="http://www.w3.org/2000/svg">
+    <defs>${d.pat}</defs>
+    <!-- buckle -->
+    <rect x="14" y="0"  width="16" height="10" rx="2" fill="#111"/>
+    <rect x="15.5" y="1.5" width="13" height="7" rx="1" fill="${d.strapF}"/>
+    <rect x="21" y="-1" width="2.5" height="13" rx="1.2" fill="#111"/>
+    <!-- top strap -->
+    <rect x="15" y="9" width="14" height="26" rx="1" fill="${d.strapF}" ${d.strapStroke ? `stroke="${d.strapStroke}" stroke-width="1"` : ''}  />
+    <ellipse cx="22" cy="17" rx="1" ry="1.6" fill="#0009"/>
+    <ellipse cx="22" cy="24" rx="1" ry="1.6" fill="#0009"/>
+    <!-- case shadow -->
+    <rect x="5" y="35" width="35" height="37" rx="14" fill="#0003"/>
+    <!-- case -->
+    <rect x="4" y="34" width="36" height="37" rx="13" fill="${d.case_}"/>
+    <!-- bezel -->
+    <circle cx="22" cy="52" r="16" fill="${d.case_}" stroke="#0002" stroke-width="1"/>
+    <!-- dial -->
+    <circle cx="22" cy="52" r="14" fill="${d.dialF}"/>
+    ${d.dialX || ''}
+    <!-- markers -->
+    <rect x="21" y="40" width="2" height="3.5" rx="1" fill="${d.hand}" opacity="0.7"/>
+    <rect x="21" y="61" width="2" height="3.5" rx="1" fill="${d.hand}" opacity="0.7"/>
+    <rect x="33" y="51" width="3.5" height="2" rx="1" fill="${d.hand}" opacity="0.45"/>
+    <rect x="7.5" y="51" width="3.5" height="2" rx="1" fill="${d.hand}" opacity="0.45"/>
+    <!-- hands -->
+    <line x1="22" y1="52" x2="15" y2="43" stroke="${d.hand}" stroke-width="2.8" stroke-linecap="round"/>
+    <line x1="22" y1="52" x2="29" y2="42" stroke="${d.hand}" stroke-width="2"   stroke-linecap="round"/>
+    <circle cx="22" cy="52" r="2.2" fill="${d.hand}"/>
+    <!-- bottom strap -->
+    <path d="M15 71 L15 94 Q15 108 22 109 Q29 108 29 94 L29 71 Z" fill="${d.strapF2 || d.strapF}" ${d.strapStroke ? `stroke="${d.strapStroke}" stroke-width="1"` : ''} />
+  </svg>`;
+}
+
+// ─── DECOY SVGs ───────────────────────────────────────────────────────────────
+
+const DECOY_SVG = {
+  mug: `<svg viewBox="0 0 70 70" width="64" height="64" xmlns="http://www.w3.org/2000/svg">
+    <rect x="12" y="24" width="36" height="36" rx="6" fill="#e8755a"/>
+    <rect x="14" y="26" width="32" height="32" rx="5" fill="#f0876c"/>
+    <path d="M48 34 Q62 32 62 44 Q62 56 48 54" stroke="#e8755a" stroke-width="7" fill="none" stroke-linecap="round"/>
+    <rect x="18" y="42" width="24" height="3" rx="1.5" fill="#fff3" />
+    <ellipse cx="30" cy="14" rx="2" ry="6" fill="#b8d8f0" opacity="0.7"/>
+    <ellipse cx="38" cy="11" rx="2" ry="8" fill="#b8d8f0" opacity="0.4"/>
+  </svg>`,
+
+  banana: `<svg viewBox="0 0 70 60" width="70" height="60" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 48 Q8 30 20 18 Q34 6 54 14 Q60 17 58 22 Q56 20 50 20 Q34 18 22 30 Q14 40 18 52 Z" fill="#f5e642"/>
+    <path d="M10 48 Q8 30 20 18 Q34 6 54 14" stroke="#d4b800" stroke-width="2" fill="none"/>
+    <path d="M54 14 Q62 10 62 16 Q62 20 58 22 Q56 20 54 14 Z" fill="#5a8a00"/>
+  </svg>`,
+
+  lime: `<svg viewBox="0 0 60 60" width="60" height="60" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="30" cy="30" r="26" fill="#78c800"/>
+    <circle cx="30" cy="30" r="22" fill="#a0e000"/>
+    <line x1="30" y1="8"  x2="30" y2="52" stroke="#78c800" stroke-width="1.5"/>
+    <line x1="8"  y1="30" x2="52" y2="30" stroke="#78c800" stroke-width="1.5"/>
+    <line x1="14" y1="14" x2="46" y2="46" stroke="#78c800" stroke-width="1"/>
+    <line x1="46" y1="14" x2="14" y2="46" stroke="#78c800" stroke-width="1"/>
+    <circle cx="30" cy="30" r="5" fill="#78c800"/>
+  </svg>`,
+
+  lego: `<svg viewBox="0 0 64 56" width="64" height="56" xmlns="http://www.w3.org/2000/svg">
+    <rect x="2"  y="14" width="18" height="38" rx="2" fill="#e53935"/>
+    <rect x="22" y="8"  width="18" height="44" rx="2" fill="#f9ca24"/>
+    <rect x="42" y="18" width="18" height="34" rx="2" fill="#1e88e5"/>
+    <circle cx="11" cy="11" r="5" fill="#c62828"/>
+    <circle cx="31" cy="5"  r="5" fill="#f0a000"/>
+    <circle cx="51" cy="15" r="5" fill="#1565c0"/>
+  </svg>`,
+
+  gumball: `<svg viewBox="0 0 64 64" width="64" height="64" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="32" cy="32" r="28" fill="#e8e8e8" stroke="#ccc" stroke-width="1.5"/>
+    <circle cx="32" cy="32" r="24" fill="#f0f0f0" opacity="0.5"/>
+    <circle cx="20" cy="22" r="7" fill="#e53935"/>
+    <circle cx="38" cy="18" r="5" fill="#1e88e5"/>
+    <circle cx="44" cy="32" r="6" fill="#f9ca24"/>
+    <circle cx="36" cy="44" r="7" fill="#43a047"/>
+    <circle cx="22" cy="40" r="5" fill="#e91e63"/>
+    <circle cx="26" cy="30" r="4" fill="#f57c00"/>
+    <circle cx="32" cy="32" r="5" fill="#fff" opacity="0.4"/>
+  </svg>`,
+
+  mango: `<svg viewBox="0 0 56 68" width="56" height="68" xmlns="http://www.w3.org/2000/svg">
+    <path d="M28 62 Q8 50 8 30 Q8 10 28 8 Q48 10 48 30 Q48 50 28 62 Z" fill="#f5a623"/>
+    <path d="M28 62 Q10 50 10 30 Q10 12 28 10" fill="#fbbf24" opacity="0.5"/>
+    <path d="M28 8 Q32 2 36 6" stroke="#5a8a00" stroke-width="3" fill="none" stroke-linecap="round"/>
+    <ellipse cx="22" cy="28" rx="5" ry="7" fill="#fcd34d" opacity="0.5"/>
+  </svg>`,
+
+  kiwi: `<svg viewBox="0 0 64 64" width="64" height="64" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="32" cy="32" r="28" fill="#5a3a1a"/>
+    <circle cx="32" cy="32" r="24" fill="#78c800"/>
+    <circle cx="32" cy="32" r="18" fill="#a8e830"/>
+    <circle cx="32" cy="32" r="5"  fill="#fef9c3"/>
+    <line x1="32" y1="14" x2="32" y2="20" stroke="#5a3a1a" stroke-width="1.5"/>
+    <line x1="32" y1="44" x2="32" y2="50" stroke="#5a3a1a" stroke-width="1.5"/>
+    <line x1="14" y1="32" x2="20" y2="32" stroke="#5a3a1a" stroke-width="1.5"/>
+    <line x1="44" y1="32" x2="50" y2="32" stroke="#5a3a1a" stroke-width="1.5"/>
+    <line x1="19" y1="19" x2="23" y2="23" stroke="#5a3a1a" stroke-width="1.5"/>
+    <line x1="45" y1="19" x2="41" y2="23" stroke="#5a3a1a" stroke-width="1.5"/>
+    <line x1="19" y1="45" x2="23" y2="41" stroke="#5a3a1a" stroke-width="1.5"/>
+    <line x1="45" y1="45" x2="41" y2="41" stroke="#5a3a1a" stroke-width="1.5"/>
+  </svg>`,
+
+  rubiks: `<svg viewBox="0 0 64 64" width="64" height="64" xmlns="http://www.w3.org/2000/svg">
+    <rect x="4"  y="4"  width="17" height="17" rx="2" fill="#e53935"/>
+    <rect x="23" y="4"  width="17" height="17" rx="2" fill="#f9ca24"/>
+    <rect x="42" y="4"  width="17" height="17" rx="2" fill="#1e88e5"/>
+    <rect x="4"  y="23" width="17" height="17" rx="2" fill="#ff7043"/>
+    <rect x="23" y="23" width="17" height="17" rx="2" fill="#fff"/>
+    <rect x="42" y="23" width="17" height="17" rx="2" fill="#43a047"/>
+    <rect x="4"  y="42" width="17" height="17" rx="2" fill="#43a047"/>
+    <rect x="23" y="42" width="17" height="17" rx="2" fill="#1e88e5"/>
+    <rect x="42" y="42" width="17" height="17" rx="2" fill="#e53935"/>
+  </svg>`,
+
+  watermelon: `<svg viewBox="0 0 72 52" width="72" height="52" xmlns="http://www.w3.org/2000/svg">
+    <path d="M4 48 Q4 4 36 4 Q68 4 68 48 Z" fill="#e53935"/>
+    <path d="M4 48 Q4 8 36 8 Q68 8 68 48 Z" fill="#ff6659"/>
+    <path d="M4 48 L68 48 Q60 54 36 54 Q12 54 4 48 Z" fill="#43a047"/>
+    <path d="M6 48 L66 48 Q58 52 36 52 Q14 52 6 48 Z" fill="#66bb6a"/>
+    <circle cx="22" cy="30" r="2.5" fill="#1a1a1a"/>
+    <circle cx="36" cy="22" r="2.5" fill="#1a1a1a"/>
+    <circle cx="50" cy="30" r="2.5" fill="#1a1a1a"/>
+    <circle cx="30" cy="38" r="2"   fill="#1a1a1a"/>
+    <circle cx="44" cy="38" r="2"   fill="#1a1a1a"/>
+  </svg>`,
+
+  // ── Switzerland level decoys ──────────────────────────────────────────────────
+
+  'swiss-cheese': `<svg viewBox="0 0 80 60" width="80" height="60" xmlns="http://www.w3.org/2000/svg">
+    <path d="M4 54 L40 4 L76 54 Z" fill="#f5c518"/>
+    <path d="M4 54 Q40 62 76 54 L76 54 Z" fill="#d89820"/>
+    <rect x="4" y="54" width="72" height="5" rx="2" fill="#d89820"/>
+    <ellipse cx="27" cy="36" rx="6.5" ry="5.5" fill="#e8a820" opacity="0.85"/>
+    <ellipse cx="46" cy="28" rx="5.5" ry="4.5" fill="#e8a820" opacity="0.85"/>
+    <ellipse cx="57" cy="42" rx="5"   ry="4"   fill="#e8a820" opacity="0.8"/>
+    <ellipse cx="35" cy="46" rx="4"   ry="3.5" fill="#e8a820" opacity="0.75"/>
+    <ellipse cx="20" cy="48" rx="3.5" ry="3"   fill="#e8a820" opacity="0.7"/>
+  </svg>`,
+
+  mountain: `<svg viewBox="0 0 90 76" width="90" height="76" xmlns="http://www.w3.org/2000/svg">
+    <!-- Black mountain silhouette: left secondary peak + main peak -->
+    <path d="M0 76 L20 40 L34 52 L48 4 L90 76 Z" fill="#111" stroke="white" stroke-width="2" stroke-linejoin="round"/>
+    <!-- Snow crown at main peak -->
+    <path d="M48 4 L39 22 L43 18 L37 30 L48 25 L59 30 L53 18 L57 22 Z" fill="white"/>
+    <!-- Snow at left sub-peak -->
+    <path d="M20 40 L13 51 L17 48 L12 57 L22 52 L23 44 Z" fill="white"/>
+    <!-- Right slope diagonal slash 1 -->
+    <path d="M64 40 L68 42 L72 56 L68 54 Z" fill="white"/>
+    <!-- Right slope diagonal slash 2 -->
+    <path d="M74 53 L77 55 L79 64 L76 62 Z" fill="white"/>
+  </svg>`,
+
+  'swiss-train': `<svg viewBox="0 0 102 58" width="102" height="58" xmlns="http://www.w3.org/2000/svg">
+    <!-- train body (red) -->
+    <rect x="2" y="4" width="98" height="44" rx="8" fill="#e53935"/>
+    <!-- white stripe (upper portion, well above cross) -->
+    <rect x="2" y="22" width="98" height="6" fill="white"/>
+    <!-- windows (clearly above stripe) -->
+    <rect x="10" y="10" width="14" height="10" rx="2" fill="#2a2a3a"/>
+    <rect x="28" y="10" width="14" height="10" rx="2" fill="#2a2a3a"/>
+    <rect x="46" y="10" width="14" height="10" rx="2" fill="#2a2a3a"/>
+    <rect x="64" y="10" width="14" height="10" rx="2" fill="#2a2a3a"/>
+    <rect x="82" y="10" width="12" height="10" rx="2" fill="#2a2a3a"/>
+    <!-- Swiss white cross — entirely on lower red section below stripe -->
+    <rect x="40" y="34" width="20" height="6"  rx="1" fill="white"/>
+    <rect x="47" y="30" width="6"  height="14" rx="1" fill="white"/>
+    <!-- undercarriage -->
+    <rect x="2" y="46" width="98" height="6"  rx="4" fill="#2a2a3a"/>
+    <!-- wheels -->
+    <circle cx="18" cy="52" r="4" fill="#3a3a3a"/>
+    <circle cx="42" cy="52" r="4" fill="#3a3a3a"/>
+    <circle cx="62" cy="52" r="4" fill="#3a3a3a"/>
+    <circle cx="86" cy="52" r="4" fill="#3a3a3a"/>
+  </svg>`,
+
+  chocolate: `<svg viewBox="0 0 70 60" width="70" height="60" xmlns="http://www.w3.org/2000/svg">
+    <!-- foil wrapper bottom (red) -->
+    <rect x="4" y="30" width="62" height="26" rx="3" fill="#e53935"/>
+    <!-- foil torn edge (crinkled silver) -->
+    <path d="M4 30 Q10 26 16 30 Q22 26 28 30 Q34 26 40 30 Q46 26 52 30 Q58 26 66 30 L66 34 L4 34 Z" fill="#c8c8c8"/>
+    <!-- chocolate bar body -->
+    <rect x="4" y="6" width="62" height="26" rx="3" fill="#7b3f00"/>
+    <!-- chocolate segment grid -->
+    <line x1="22" y1="8" x2="22" y2="30" stroke="#5a2d00" stroke-width="2"/>
+    <line x1="40" y1="8" x2="40" y2="30" stroke="#5a2d00" stroke-width="2"/>
+    <line x1="56" y1="8" x2="56" y2="30" stroke="#5a2d00" stroke-width="2"/>
+    <line x1="6"  y1="19" x2="64" y2="19" stroke="#5a2d00" stroke-width="2"/>
+    <!-- highlight on chocolate -->
+    <rect x="6"  y="8"  width="14" height="5" rx="1" fill="#9b5f20" opacity="0.5"/>
+    <rect x="24" y="8"  width="14" height="5" rx="1" fill="#9b5f20" opacity="0.5"/>
+  </svg>`,
+
+  cowbell: `<svg viewBox="0 0 52 80" width="52" height="80" xmlns="http://www.w3.org/2000/svg">
+    <!-- hanging loop (D-ring at top) -->
+    <path d="M22 5 Q26 1 30 5 L30 10 Q26 13 22 10 Z" fill="none" stroke="#7a5010" stroke-width="3" stroke-linejoin="round"/>
+    <!-- collar body (dark brown leather) -->
+    <rect x="6" y="9" width="40" height="30" rx="3" fill="#3d1c0a"/>
+    <!-- collar front face inset -->
+    <rect x="12" y="11" width="28" height="26" rx="2" fill="#2a1006"/>
+    <!-- bead column LEFT (on collar left edge) -->
+    <ellipse cx="9"  cy="15" rx="4" ry="2.8" fill="#f9ca24"/>
+    <ellipse cx="9"  cy="22" rx="4" ry="2.8" fill="#f5f5f5"/>
+    <ellipse cx="9"  cy="29" rx="4" ry="2.8" fill="#e53935"/>
+    <ellipse cx="9"  cy="36" rx="4" ry="2.8" fill="#43a047"/>
+    <!-- bead column RIGHT (on collar right edge) -->
+    <ellipse cx="43" cy="15" rx="4" ry="2.8" fill="#43a047"/>
+    <ellipse cx="43" cy="22" rx="4" ry="2.8" fill="#e53935"/>
+    <ellipse cx="43" cy="29" rx="4" ry="2.8" fill="#f5f5f5"/>
+    <ellipse cx="43" cy="36" rx="4" ry="2.8" fill="#f9ca24"/>
+    <!-- red transition band -->
+    <rect x="4" y="37" width="44" height="6" rx="2" fill="#c62828"/>
+    <!-- bell body (brass/gold trapezoid, wider at bottom) -->
+    <path d="M8 43 L6 56 Q5 66 8 70 Q14 76 26 76 Q38 76 44 70 Q47 66 46 56 L44 43 Z" fill="#c8a820"/>
+    <!-- bell highlight (left sheen) -->
+    <path d="M8 43 L6 56 Q5 66 8 70 Q12 74 18 76 L14 43 Z" fill="#b09018" opacity="0.4"/>
+    <!-- bell highlight (center glint) -->
+    <ellipse cx="18" cy="58" rx="4" ry="7" fill="#e0c040" opacity="0.4"/>
+  </svg>`,
+
+  cow: `<svg viewBox="0 0 140 110" width="140" height="110" xmlns="http://www.w3.org/2000/svg">
+    <!-- legs -->
+    <rect x="55" y="82" width="10" height="18" rx="2" fill="#fff" stroke="#1a1a1a" stroke-width="2.5"/>
+    <rect x="78" y="82" width="10" height="18" rx="2" fill="#fff" stroke="#1a1a1a" stroke-width="2.5"/>
+    <rect x="100" y="82" width="10" height="18" rx="2" fill="#fff" stroke="#1a1a1a" stroke-width="2.5"/>
+    <rect x="55" y="95" width="10" height="6" rx="1.5" fill="#1a1a1a"/>
+    <rect x="78" y="95" width="10" height="6" rx="1.5" fill="#1a1a1a"/>
+    <rect x="100" y="95" width="10" height="6" rx="1.5" fill="#1a1a1a"/>
+    <!-- tail -->
+    <path d="M120 55 Q128 55 126 72" stroke="#1a1a1a" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    <ellipse cx="126" cy="74" rx="3.5" ry="4.5" fill="#1a1a1a"/>
+    <!-- body -->
+    <ellipse cx="85" cy="65" rx="38" ry="25" fill="#fff" stroke="#1a1a1a" stroke-width="2.5"/>
+    <!-- body spots -->
+    <ellipse cx="95" cy="55" rx="9" ry="7" fill="#1a1a1a"/>
+    <ellipse cx="108" cy="68" rx="5" ry="4" fill="#1a1a1a"/>
+    <ellipse cx="78" cy="75" rx="6" ry="4.5" fill="#1a1a1a"/>
+    <ellipse cx="65" cy="62" rx="4" ry="3" fill="#1a1a1a"/>
+    <!-- ears -->
+    <ellipse cx="32" cy="38" rx="7" ry="9" fill="#fff" stroke="#1a1a1a" stroke-width="2.5" transform="rotate(-25 32 38)"/>
+    <ellipse cx="32" cy="40" rx="3.5" ry="5" fill="#ffc0cb" transform="rotate(-25 32 40)"/>
+    <ellipse cx="68" cy="32" rx="7" ry="9" fill="#fff" stroke="#1a1a1a" stroke-width="2.5" transform="rotate(25 68 32)"/>
+    <ellipse cx="68" cy="34" rx="3.5" ry="5" fill="#ffc0cb" transform="rotate(25 68 34)"/>
+    <!-- horns -->
+    <path d="M42 28 L40 20 L46 24 Z" fill="#c89868" stroke="#1a1a1a" stroke-width="2" stroke-linejoin="round"/>
+    <path d="M58 26 L60 18 L54 22 Z" fill="#c89868" stroke="#1a1a1a" stroke-width="2" stroke-linejoin="round"/>
+    <!-- head -->
+    <circle cx="50" cy="50" r="22" fill="#fff" stroke="#1a1a1a" stroke-width="2.5"/>
+    <!-- head spot -->
+    <path d="M48 32 Q56 30 60 36 Q58 42 50 40 Z" fill="#1a1a1a"/>
+    <!-- muzzle -->
+    <ellipse cx="46" cy="58" rx="16" ry="11" fill="#ffc0cb" stroke="#1a1a1a" stroke-width="2"/>
+    <!-- cheeks -->
+    <circle cx="36" cy="61" r="2.5" fill="#e89aab" opacity="0.7"/>
+    <circle cx="56" cy="63" r="2.5" fill="#e89aab" opacity="0.7"/>
+    <!-- nostrils -->
+    <ellipse cx="42" cy="55" rx="1" ry="1.5" fill="#1a1a1a"/>
+    <ellipse cx="50" cy="55" rx="1" ry="1.5" fill="#1a1a1a"/>
+    <!-- mouth -->
+    <path d="M40 62 Q46 67 52 62" stroke="#1a1a1a" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    <!-- eyes -->
+    <circle cx="42" cy="44" r="2.8" fill="#1a1a1a"/>
+    <circle cx="60" cy="44" r="2.8" fill="#1a1a1a"/>
+  </svg>`,
+
+  // ── Art Museum level decoys ───────────────────────────────────────────────────
+
+  palette: `<svg viewBox="0 0 70 58" width="70" height="58" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 32 Q8 12 30 6 Q52 2 62 20 Q70 36 54 48 Q44 58 28 52 Q18 48 16 40 Q12 38 10 32 Z" fill="#e8d8b0" stroke="#c4b47a" stroke-width="1"/>
+    <circle cx="24" cy="12" r="5.5" fill="#e53935"/>
+    <circle cx="38" cy="9"  r="5"   fill="#f9ca24"/>
+    <circle cx="52" cy="16" r="5"   fill="#1e88e5"/>
+    <circle cx="58" cy="30" r="5"   fill="#43a047"/>
+    <circle cx="52" cy="44" r="5"   fill="#e91e63"/>
+    <ellipse cx="18" cy="38" rx="6" ry="9" fill="#c8a860" opacity="0.35"/>
+  </svg>`,
+
+  brush: `<svg viewBox="0 0 24 96" width="24" height="96" xmlns="http://www.w3.org/2000/svg">
+    <rect x="9" y="0" width="6" height="54" rx="3" fill="#c8a060"/>
+    <rect x="7" y="18" width="10" height="3" rx="1" fill="#e8c080" opacity="0.5"/>
+    <rect x="8" y="50" width="8" height="8" rx="1" fill="#888"/>
+    <!-- bristles with stroke so they read against dark background -->
+    <path d="M8 58 Q6 66 7 73 Q9 82 12 82 Q15 82 17 73 Q18 66 16 58 Z" fill="#1a1a1a" stroke="#5a5a5a" stroke-width="1.2"/>
+    <ellipse cx="12" cy="82" rx="3.5" ry="4.5" fill="#111" stroke="#5a5a5a" stroke-width="1"/>
+    <!-- single paint blob at tip -->
+    <path d="M9 82 Q7 88 12 93 Q17 88 15 82 Q12 79 9 82 Z" fill="#1da1e8"/>
+  </svg>`,
+
+  'art-apple': `<svg viewBox="0 0 52 62" width="52" height="62" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 30 Q8 12 26 8 Q44 12 44 30 Q44 48 26 52 Q8 48 10 30 Z" fill="#5a9840"/>
+    <path d="M10 28 Q8 14 26 10 Q40 14 42 28" fill="#72bb50" opacity="0.5"/>
+    <path d="M26 8 Q23 3 25 0"  stroke="#4a7030" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+    <path d="M26 4 Q32 1 36 4"  stroke="#5a8828" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <ellipse cx="18" cy="26" rx="6" ry="8" fill="#8acc60" opacity="0.35"/>
+  </svg>`,
+
+  bouquet: `<svg viewBox="0 0 76 90" width="76" height="90" xmlns="http://www.w3.org/2000/svg">
+    <path d="M26 64 Q18 68 16 78 Q18 86 38 86 Q58 86 60 78 Q58 68 50 64 Z" fill="#c8a040"/>
+    <rect x="26" y="58" width="24" height="8" rx="2" fill="#d8b050"/>
+    <line x1="32" y1="58" x2="26" y2="28" stroke="#5a8a20" stroke-width="2.5"/>
+    <line x1="38" y1="58" x2="40" y2="12" stroke="#5a8a20" stroke-width="2.5"/>
+    <line x1="44" y1="58" x2="54" y2="26" stroke="#5a8a20" stroke-width="2.5"/>
+    <ellipse cx="30" cy="42" rx="7" ry="3" fill="#5a8a20" transform="rotate(-30 30 42)"/>
+    <!-- left flower -->
+    <circle cx="26" cy="26" r="9" fill="#5a3510"/>
+    <ellipse cx="26" cy="13" rx="3.5" ry="8" fill="#f0b020"/>
+    <ellipse cx="26" cy="39" rx="3.5" ry="8" fill="#e8a010"/>
+    <ellipse cx="13" cy="26" rx="8" ry="3.5" fill="#f0b020"/>
+    <ellipse cx="39" cy="26" rx="8" ry="3.5" fill="#e8a010"/>
+    <ellipse cx="17" cy="17" rx="3" ry="7" fill="#f0b020" transform="rotate(-45 17 17)"/>
+    <ellipse cx="35" cy="17" rx="3" ry="7" fill="#e8a010" transform="rotate(45 35 17)"/>
+    <circle cx="26" cy="26" r="6" fill="#3a2008"/>
+    <!-- centre flower -->
+    <circle cx="40" cy="10" r="10" fill="#5a3510"/>
+    <ellipse cx="40" cy="-3" rx="4" ry="9" fill="#f0b020"/>
+    <ellipse cx="40" cy="23" rx="4" ry="9" fill="#e8a010"/>
+    <ellipse cx="26" cy="10" rx="9" ry="4" fill="#f0b020"/>
+    <ellipse cx="54" cy="10" rx="9" ry="4" fill="#e8a010"/>
+    <ellipse cx="30" cy="1"  rx="3.5" ry="7" fill="#f0b020" transform="rotate(-45 30 1)"/>
+    <ellipse cx="50" cy="1"  rx="3.5" ry="7" fill="#e8a010" transform="rotate(45 50 1)"/>
+    <circle cx="40" cy="10" r="7" fill="#3a2008"/>
+    <!-- right flower -->
+    <circle cx="54" cy="24" r="9" fill="#5a3510"/>
+    <ellipse cx="54" cy="11" rx="3.5" ry="8" fill="#f0b020"/>
+    <ellipse cx="54" cy="37" rx="3.5" ry="8" fill="#e8a010"/>
+    <ellipse cx="41" cy="24" rx="8" ry="3.5" fill="#f0b020"/>
+    <ellipse cx="67" cy="24" rx="8" ry="3.5" fill="#e8a010"/>
+    <ellipse cx="45" cy="15" rx="3" ry="7" fill="#f0b020" transform="rotate(-45 45 15)"/>
+    <ellipse cx="63" cy="15" rx="3" ry="7" fill="#e8a010" transform="rotate(45 63 15)"/>
+    <circle cx="54" cy="24" r="6" fill="#3a2008"/>
+  </svg>`,
+
+  splash: `<svg viewBox="0 0 88 72" width="88" height="72" xmlns="http://www.w3.org/2000/svg">
+    <!-- organic blob: overlapping same-color ellipses merge seamlessly -->
+    <ellipse cx="38" cy="38" rx="26" ry="24" fill="#9b59b6"/>
+    <ellipse cx="20" cy="24" rx="9"  ry="7"  fill="#9b59b6" transform="rotate(-30 20 24)"/>
+    <ellipse cx="38" cy="14" rx="7"  ry="10" fill="#9b59b6"/>
+    <ellipse cx="58" cy="20" rx="10" ry="7"  fill="#9b59b6" transform="rotate(20 58 20)"/>
+    <ellipse cx="65" cy="38" rx="9"  ry="7"  fill="#9b59b6"/>
+    <ellipse cx="56" cy="61" rx="8"  ry="9"  fill="#9b59b6" transform="rotate(15 56 61)"/>
+    <ellipse cx="36" cy="65" rx="10" ry="6"  fill="#9b59b6"/>
+    <ellipse cx="16" cy="54" rx="8"  ry="9"  fill="#9b59b6" transform="rotate(-20 16 54)"/>
+    <ellipse cx="12" cy="36" rx="9"  ry="7"  fill="#9b59b6"/>
+    <!-- small drops -->
+    <circle cx="76" cy="30" r="6"   fill="#1a1a1a"/>
+    <circle cx="72" cy="14" r="4.5" fill="#e05c2a"/>
+  </svg>`,
+
+  'frame-klimt': `<svg viewBox="0 0 72 88" width="72" height="88" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <pattern id="fkp" patternUnits="userSpaceOnUse" width="14" height="14">
+        <rect width="14" height="14" fill="#e8a060"/>
+        <circle cx="3.5" cy="3.5" r="3.5" fill="#8060a8" opacity="0.85"/>
+        <circle cx="10.5" cy="9.5" r="3"   fill="#f0a820" opacity="0.85"/>
+        <circle cx="3"   cy="11"  r="2.5"  fill="#5a9058" opacity="0.8"/>
+        <circle cx="12"  cy="2"   r="2"    fill="#cc5848" opacity="0.75"/>
+      </pattern>
+    </defs>
+    <rect x="0" y="0" width="72" height="88" rx="3" fill="#9a7820"/>
+    <rect x="4" y="4" width="64" height="80" rx="2" fill="#c0920c"/>
+    <rect x="8" y="8" width="56" height="72" rx="1" fill="#8a6a10"/>
+    <rect x="10" y="10" width="52" height="64" rx="1" fill="url(#fkp)"/>
+    <rect x="22" y="76" width="28" height="8" rx="2" fill="#c05818"/>
+    <text x="36" y="82" text-anchor="middle" font-size="4.5" fill="#fff" font-weight="700" font-family="sans-serif">Hope II — Klimt</text>
+  </svg>`,
+
+  'frame-vangogh': `<svg viewBox="0 0 72 88" width="72" height="88" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <pattern id="fvgp" patternUnits="userSpaceOnUse" width="16" height="12">
+        <rect width="16" height="12" fill="#1a3060"/>
+        <path d="M0 6 Q4 2 8 6 Q12 10 16 6"    stroke="#2a7080" stroke-width="2.5" fill="none"/>
+        <path d="M0 2 Q4 6 8 2 Q12 -2 16 2"    stroke="#3a8090" stroke-width="2"   fill="none"/>
+        <path d="M0 10 Q4 6 8 10 Q12 14 16 10"  stroke="#1e6070" stroke-width="2"   fill="none"/>
+        <circle cx="3" cy="9" r="1.2" fill="#c8d430" opacity="0.6"/>
+      </pattern>
+    </defs>
+    <rect x="0" y="0" width="72" height="88" rx="3" fill="#1a2840"/>
+    <rect x="4" y="4" width="64" height="80" rx="2" fill="#243060"/>
+    <rect x="8" y="8" width="56" height="72" rx="1" fill="#182038"/>
+    <rect x="10" y="10" width="52" height="64" rx="1" fill="url(#fvgp)"/>
+    <circle cx="24" cy="26" r="4"   fill="#c8d430" opacity="0.85"/>
+    <circle cx="48" cy="18" r="3"   fill="#d0dc40" opacity="0.75"/>
+    <circle cx="38" cy="34" r="2.5" fill="#c8d430" opacity="0.65"/>
+    <rect x="16" y="76" width="40" height="8" rx="2" fill="#f0f0f0"/>
+    <text x="36" y="82" text-anchor="middle" font-size="4" fill="#1a3060" font-weight="700" font-family="sans-serif">Starry Night — Van Gogh</text>
+  </svg>`,
+
+  'frame-magritte': `<svg viewBox="0 0 72 88" width="72" height="88" xmlns="http://www.w3.org/2000/svg">
+    <rect x="0" y="0" width="72" height="88" rx="3" fill="#5a5a60"/>
+    <rect x="4" y="4" width="64" height="80" rx="2" fill="#6a6a70"/>
+    <rect x="8" y="8" width="56" height="72" rx="1" fill="#4a4a50"/>
+    <rect x="10" y="10" width="52" height="64" rx="1" fill="#a0a8b0"/>
+    <rect x="20" y="50" width="32" height="24" rx="3" fill="#38485a"/>
+    <rect x="30" y="50" width="12" height="24" rx="2" fill="#b83030"/>
+    <circle cx="36" cy="42" r="12" fill="#5a9840"/>
+    <path d="M36 30 Q33 24 35 20" stroke="#4a7030" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <ellipse cx="36" cy="32" rx="16" ry="4.5" fill="#111"/>
+    <rect x="24" y="26" width="24" height="8" rx="3" fill="#111"/>
+    <rect x="14" y="76" width="44" height="8" rx="2" fill="#8a8e94"/>
+    <text x="36" y="82" text-anchor="middle" font-size="3.8" fill="#f0f0f0" font-family="serif" font-style="italic">Le Fils de l'Homme</text>
+  </svg>`,
+
+  frame: `<svg viewBox="0 0 66 66" width="66" height="66" xmlns="http://www.w3.org/2000/svg">
+    <rect x="0" y="0" width="66" height="66" rx="3" fill="#7a5c10"/>
+    <rect x="5" y="5" width="56" height="56" rx="2" fill="#9a7820"/>
+    <rect x="10" y="10" width="46" height="46" rx="1" fill="#6a4c08"/>
+    <rect x="14" y="14" width="38" height="38" rx="1" fill="#c8d4e0"/>
+  </svg>`,
+
+  // ── B&W level decoys ─────────────────────────────────────────────────────────
+
+  piano: `<svg viewBox="0 0 80 48" width="80" height="48" xmlns="http://www.w3.org/2000/svg">
+    <rect x="0" y="0" width="80" height="48" rx="3" fill="#f8f8f4" stroke="#bbb" stroke-width="1.5"/>
+    <rect x="9"  y="0" width="10" height="30" rx="2" fill="#1a1a1a"/>
+    <rect x="23" y="0" width="10" height="30" rx="2" fill="#1a1a1a"/>
+    <rect x="45" y="0" width="10" height="30" rx="2" fill="#1a1a1a"/>
+    <rect x="59" y="0" width="10" height="30" rx="2" fill="#1a1a1a"/>
+    <line x1="14" y1="0" x2="14" y2="48" stroke="#ddd" stroke-width="1"/>
+    <line x1="27" y1="0" x2="27" y2="48" stroke="#ddd" stroke-width="1"/>
+    <line x1="40" y1="0" x2="40" y2="48" stroke="#ddd" stroke-width="1"/>
+    <line x1="54" y1="0" x2="54" y2="48" stroke="#ddd" stroke-width="1"/>
+    <line x1="67" y1="0" x2="67" y2="48" stroke="#ddd" stroke-width="1"/>
+  </svg>`,
+
+  domino: `<svg viewBox="0 0 38 72" width="38" height="72" xmlns="http://www.w3.org/2000/svg">
+    <rect x="1" y="1" width="36" height="70" rx="5" fill="#f5f5ef" stroke="#1a1a1a" stroke-width="2"/>
+    <line x1="2" y1="36" x2="36" y2="36" stroke="#1a1a1a" stroke-width="2"/>
+    <circle cx="11" cy="13" r="4" fill="#1a1a1a"/>
+    <circle cx="27" cy="23" r="4" fill="#1a1a1a"/>
+    <circle cx="11" cy="29" r="4" fill="#1a1a1a"/>
+    <circle cx="19" cy="50" r="4" fill="#1a1a1a"/>
+    <circle cx="11" cy="60" r="4" fill="#1a1a1a"/>
+    <circle cx="27" cy="60" r="4" fill="#1a1a1a"/>
+  </svg>`,
+
+  film: `<svg viewBox="0 0 46 82" width="46" height="82" xmlns="http://www.w3.org/2000/svg">
+    <rect x="0" y="0" width="46" height="82" rx="2" fill="#1a1a1a"/>
+    <rect x="2"  y="5"  width="8" height="6" rx="1.5" fill="#444"/>
+    <rect x="2"  y="19" width="8" height="6" rx="1.5" fill="#444"/>
+    <rect x="2"  y="33" width="8" height="6" rx="1.5" fill="#444"/>
+    <rect x="2"  y="47" width="8" height="6" rx="1.5" fill="#444"/>
+    <rect x="2"  y="61" width="8" height="6" rx="1.5" fill="#444"/>
+    <rect x="2"  y="71" width="8" height="6" rx="1.5" fill="#444"/>
+    <rect x="36" y="5"  width="8" height="6" rx="1.5" fill="#444"/>
+    <rect x="36" y="19" width="8" height="6" rx="1.5" fill="#444"/>
+    <rect x="36" y="33" width="8" height="6" rx="1.5" fill="#444"/>
+    <rect x="36" y="47" width="8" height="6" rx="1.5" fill="#444"/>
+    <rect x="36" y="61" width="8" height="6" rx="1.5" fill="#444"/>
+    <rect x="36" y="71" width="8" height="6" rx="1.5" fill="#444"/>
+    <rect x="12" y="2"  width="22" height="18" rx="1" fill="#e8e4dc" opacity="0.9"/>
+    <rect x="12" y="24" width="22" height="18" rx="1" fill="#ccc"    opacity="0.8"/>
+    <rect x="12" y="46" width="22" height="18" rx="1" fill="#e8e4dc" opacity="0.9"/>
+    <rect x="12" y="62" width="22" height="14" rx="1" fill="#bbb"    opacity="0.7"/>
+  </svg>`,
+
+  barcode: `<svg viewBox="0 0 62 42" width="62" height="42" xmlns="http://www.w3.org/2000/svg">
+    <rect x="0" y="0" width="62" height="42" fill="#fff"/>
+    <rect x="4"  y="2" width="2"   height="30" fill="#111"/>
+    <rect x="8"  y="2" width="4"   height="30" fill="#111"/>
+    <rect x="14" y="2" width="1.5" height="30" fill="#111"/>
+    <rect x="17" y="2" width="3"   height="30" fill="#111"/>
+    <rect x="22" y="2" width="2"   height="30" fill="#111"/>
+    <rect x="26" y="2" width="5"   height="30" fill="#111"/>
+    <rect x="33" y="2" width="1.5" height="30" fill="#111"/>
+    <rect x="36" y="2" width="3"   height="30" fill="#111"/>
+    <rect x="41" y="2" width="2"   height="30" fill="#111"/>
+    <rect x="45" y="2" width="4"   height="30" fill="#111"/>
+    <rect x="51" y="2" width="1.5" height="30" fill="#111"/>
+    <rect x="54" y="2" width="4"   height="30" fill="#111"/>
+    <text x="31" y="40" text-anchor="middle" font-size="5" fill="#111" font-family="monospace">4892610</text>
+  </svg>`,
+
+  soccer: `<svg viewBox="0 0 60 60" width="60" height="60" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="30" cy="30" r="27" fill="#f5f5f5" stroke="#ddd" stroke-width="1"/>
+    <polygon points="30,6 39,13 36,24 24,24 21,13"  fill="#1a1a1a"/>
+    <polygon points="8,26 16,21 24,27 21,38 9,38"   fill="#1a1a1a"/>
+    <polygon points="52,26 44,21 36,27 39,38 51,38" fill="#1a1a1a"/>
+    <polygon points="16,50 21,40 30,44 30,55 18,55" fill="#1a1a1a"/>
+    <polygon points="44,50 39,40 30,44 30,55 42,55" fill="#1a1a1a"/>
+  </svg>`,
+
+  penguin: `<svg viewBox="0 0 52 68" width="52" height="68" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="26" cy="44" rx="18" ry="22" fill="#1a1a1a"/>
+    <ellipse cx="26" cy="47" rx="11" ry="15" fill="#f5f5f5"/>
+    <circle cx="26" cy="18" r="13" fill="#1a1a1a"/>
+    <ellipse cx="26" cy="20" rx="7" ry="8" fill="#f5f5f5"/>
+    <circle cx="22" cy="16" r="2.5" fill="#fff"/>
+    <circle cx="30" cy="16" r="2.5" fill="#fff"/>
+    <circle cx="22.5" cy="16.5" r="1.2" fill="#111"/>
+    <circle cx="30.5" cy="16.5" r="1.2" fill="#111"/>
+    <polygon points="26,22 23,26 29,26" fill="#f9ca24"/>
+    <ellipse cx="9"  cy="50" rx="5" ry="11" fill="#1a1a1a" transform="rotate(-15 9 50)"/>
+    <ellipse cx="43" cy="50" rx="5" ry="11" fill="#1a1a1a" transform="rotate(15 43 50)"/>
+    <ellipse cx="19" cy="64" rx="6" ry="3.5" fill="#f9ca24"/>
+    <ellipse cx="33" cy="64" rx="6" ry="3.5" fill="#f9ca24"/>
+  </svg>`,
+
+  panda: `<svg viewBox="0 0 64 64" width="64" height="64" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="32" cy="34" r="26" fill="#f5f5f5"/>
+    <circle cx="10" cy="10" r="10" fill="#1a1a1a"/>
+    <circle cx="54" cy="10" r="10" fill="#1a1a1a"/>
+    <ellipse cx="20" cy="28" rx="10" ry="9" fill="#1a1a1a" transform="rotate(-15 20 28)"/>
+    <ellipse cx="44" cy="28" rx="10" ry="9" fill="#1a1a1a" transform="rotate(15 44 28)"/>
+    <circle cx="20" cy="28" r="5" fill="#fff"/>
+    <circle cx="44" cy="28" r="5" fill="#fff"/>
+    <circle cx="20" cy="28.5" r="2.5" fill="#111"/>
+    <circle cx="44" cy="28.5" r="2.5" fill="#111"/>
+    <ellipse cx="32" cy="42" rx="6" ry="4" fill="#1a1a1a"/>
+    <path d="M25 47 Q32 53 39 47" stroke="#1a1a1a" stroke-width="2" fill="none" stroke-linecap="round"/>
+  </svg>`,
+
+  paper: `<svg viewBox="0 0 68 54" width="68" height="54" xmlns="http://www.w3.org/2000/svg">
+    <rect x="0" y="0" width="68" height="54" rx="2" fill="#e8e4d6"/>
+    <rect x="4" y="4" width="60" height="7"  rx="1" fill="#1a1a1a"/>
+    <rect x="4" y="15" width="28" height="2" rx="1" fill="#555" opacity="0.8"/>
+    <rect x="4" y="20" width="28" height="2" rx="1" fill="#555" opacity="0.8"/>
+    <rect x="4" y="25" width="22" height="2" rx="1" fill="#555" opacity="0.8"/>
+    <rect x="4" y="30" width="28" height="2" rx="1" fill="#555" opacity="0.8"/>
+    <rect x="4" y="35" width="24" height="2" rx="1" fill="#555" opacity="0.8"/>
+    <rect x="4" y="40" width="28" height="2" rx="1" fill="#555" opacity="0.8"/>
+    <rect x="4" y="45" width="16" height="2" rx="1" fill="#555" opacity="0.8"/>
+    <rect x="37" y="15" width="27" height="20" rx="2" fill="#c8c4b8"/>
+    <rect x="37" y="38" width="27" height="2"  rx="1" fill="#555" opacity="0.6"/>
+    <rect x="37" y="43" width="22" height="2"  rx="1" fill="#555" opacity="0.6"/>
+    <line x1="33" y1="13" x2="33" y2="52" stroke="#bbb" stroke-width="1"/>
+  </svg>`,
+};
+
+// ─── GAME STATE ───────────────────────────────────────────────────────────────
+
+const LEVELS = [
+  {
+    name: 'Color Splash',
+    bgClass: 'bg-color-splash',
+    time: 50,
+    penalty: 5,
+    need: 5, // all 4 watches + the rare
+    catchRare: true,
+    speed: { base: 0.026, variance: 0.007 },
+    drift: 0,
+    bounce: false,
+    pairs: [
+      { watch: 'banana-shake',  tricky: 'banana'  },
+      { watch: 'tet-wrist',     tricky: 'rubiks'  },
+      { watch: 'color-palette', tricky: 'lego'    },
+      { watch: 'friandise',     tricky: 'gumball' },
+    ],
+    extras: ['mango', 'kiwi', 'watermelon', 'lime'],
+    rares: [
+      { watch: 'what-if-micro', speed: 0.050, passes: 3 },
+    ],
+  },
+  {
+    // Items fall at an angle, drifting left/right and wrapping around the sides
+    name: 'Black & White',
+    bgClass: 'bg-bw',
+    time: 45,
+    penalty: 5,
+    need: 5, // all 4 watches + the rare
+    catchRare: true,
+    speed: { base: 0.029, variance: 0.007 },
+    drift: 0.010,
+    bounce: false,
+    pairs: [
+      { watch: 'mood-of-the-day',  tricky: 'domino'  },
+      { watch: 'arnould-fashions', tricky: 'barcode' },
+      { watch: 'skinalliage',      tricky: 'piano'   },
+      { watch: 'chicken-run',      tricky: 'film'    },
+    ],
+    extras: ['soccer', 'penguin', 'panda', 'paper', 'soccer', 'panda'],
+    rares: [
+      { watch: 'mission-to-uranus', speed: 0.046 },
+    ],
+  },
+  {
+    // Drift continues, but now items bounce off the side walls instead of wrapping
+    name: 'Art Museum',
+    bgClass: 'bg-art',
+    time: 40,
+    penalty: 5,
+    need: 4, // all 3 watches + the rare
+    catchRare: true,
+    speed: { base: 0.035, variance: 0.008 },
+    drift: 0.014,
+    bounce: true,
+    pairs: [
+      { watch: 'hope-ii',      tricky: 'frame-vangogh' },
+      { watch: 'starry-night', tricky: 'palette' },
+      { watch: 'le-fils',      tricky: 'brush' },
+    ],
+    extras: ['palette', 'brush', 'art-apple', 'bouquet', 'splash', 'frame-klimt', 'frame-vangogh', 'frame-magritte', 'palette', 'splash'],
+    rares: [
+      { watch: 'mirror-swatch-mickey', speed: 0.050 },
+    ],
+  },
+  {
+    // Drift + bounce, plus a few items fall in from off-screen sides,
+    // and a couple of decoys carry a "fake rare" glow (bluish, not gold) to mislead
+    name: 'Switzerland',
+    bgClass: 'bg-switzerland',
+    time: 35,
+    penalty: 5,
+    need: 4, // all 3 watches + the rare
+    catchRare: true,
+    speed: { base: 0.039, variance: 0.009 },
+    drift: 0.018,
+    bounce: true,
+    sideEntry: ['swiss-train', 'cow'],
+    fakeRare: ['cowbell', 'chocolate'],
+    pairs: [
+      { watch: 'scene-de-zuri', tricky: 'mountain' },
+      { watch: 'bout-du-lac',   tricky: 'swiss-cheese' },
+      { watch: 'nachster-halt', tricky: 'chocolate' },
+    ],
+    extras: ['swiss-cheese', 'mountain', 'swiss-train', 'chocolate', 'cowbell', 'cow', 'mountain', 'swiss-cheese', 'cow'],
+    rares: [
+      { watch: 'swiss-ride', speed: 0.046 },
+    ],
+  },
+];
+let LEVEL = LEVELS[0];
+let levelIndex = 0;
+let totalScore = 0;          // cumulative score across a full 4-level run
+let allCaught   = new Set();  // unique watch ids caught this session
+let replaysUsed = 0;          // replays used on the current level attempt (max 1)
+
+let timer   = 45;
+let caught  = [];
+let items   = [];
+let running = false;
+let raf     = null;
+let lastTs  = 0;
+
+// ─── BEST SCORE PERSISTENCE ─────────────────────────────────────────────────────
+
+function getBest(key) {
+  return parseInt(localStorage.getItem(key) || '0', 10);
+}
+function setBestIfHigher(key, value) {
+  const best = getBest(key);
+  if (value > best) { localStorage.setItem(key, value); return true; }
+  return false;
+}
+
+// ─── SCREEN ───────────────────────────────────────────────────────────────────
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const screen = document.getElementById('screen-' + id);
+  screen.classList.add('active');
+  screen.scrollTop = 0;
+}
+
+// ─── IRL COLLECTION MODAL ───────────────────────────────────────────────────
+
+function openIrlModal() {
+  document.getElementById('irl-overlay').classList.add('active');
+}
+
+function closeIrlModal() {
+  document.getElementById('irl-overlay').classList.remove('active');
+}
+
+// ─── ITEM CREATION ────────────────────────────────────────────────────────────
+
+function spawnOne(type, key, startX, startY, opts = {}) {
+  const area = document.getElementById('game-area');
+  const el   = document.createElement('div');
+  el.className    = 'fall-item';
+  el.dataset.type = type;
+  el.dataset.key  = key;
+  const glowKind = opts.rare ? 'rare' : (opts.fakeRare ? 'fake-rare' : null);
+  if (glowKind) el.classList.add(glowKind + '-glow');
+
+  el.innerHTML = type === 'watch' ? makeWatch(key) : (DECOY_SVG[key] || DECOY_SVG.mug);
+
+  const rot = (Math.random() - 0.5) * 26;
+  el.style.setProperty('--r', rot + 'deg');
+  el.style.transform = `rotate(${rot}deg)`;
+  el.style.left = startX + '%';
+  el.style.top  = startY + '%';
+  area.appendChild(el);
+
+  const speed = opts.speed || (LEVEL.speed.base + (Math.random() - 0.5) * LEVEL.speed.variance);
+
+  // Horizontal drift: side-entry items drift strongly toward center,
+  // everything else gets the level's ambient drift (if any)
+  let driftV = 0;
+  if (opts.sideEntry) {
+    driftV = (opts.fromLeft ? 1 : -1) * (0.045 + Math.random() * 0.025);
+  } else if (LEVEL.drift) {
+    driftV = (Math.random() < 0.5 ? -1 : 1) * LEVEL.drift * (0.6 + Math.random() * 0.8);
+  }
+
+  return {
+    key, type, el, x: startX, y: startY, speed, driftV,
+    rot, rotV: (Math.random() - 0.5) * 0.03,
+    caught: false, expired: false,
+    rare: opts.rare || false,
+    glowKind,
+    entered: !opts.sideEntry, // side-entry items start off-screen, not yet "in" the play area
+    passes: 0, maxPasses: opts.passes || 999,
+    sparkled: false,
+  };
+}
+
+// ─── GAME START ───────────────────────────────────────────────────────────────
+
+function selectLevel(idx) {
+  levelIndex = idx;
+  LEVEL = LEVELS[idx];
+  replaysUsed = 0;
+  if (idx === 0) {            // starting a fresh run resets the run tally
+    totalScore = 0;
+    allCaught  = new Set();
+  }
+  startGame();
+}
+
+function replayLevel() {
+  replaysUsed++;
+  startGame();
+}
+
+function scrollToCollection() {
+  document.getElementById('r-showcase-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function startGame() {
+  timer   = LEVEL.time;
+  caught  = [];
+  items   = [];
+  running = true;
+
+  const totalTargets = LEVEL.pairs.length + (LEVEL.catchRare ? (LEVEL.rares || []).length : 0);
+
+  document.getElementById('hud-count').textContent = '0';
+  document.getElementById('hud-total').textContent = '/' + totalTargets;
+  document.getElementById('hud-level-title').textContent = LEVEL.name;
+  updateTimerDisplay();
+  const gameArea = document.getElementById('game-area');
+  gameArea.innerHTML = '';
+  gameArea.className = LEVEL.bgClass;
+
+  // Spawn paired items: each watch gets a tricky decoy in the same x-zone,
+  // watches staggered ~30% apart vertically so max 2 are visible at once
+  LEVEL.pairs.forEach((pair, i) => {
+    const watchX  = 8 + Math.random() * 74;
+    const watchY  = -8 - (i * 55);                          // ~2s gap between watches
+    const decoyX  = Math.max(4, Math.min(86, watchX + (Math.random() - 0.5) * 22));
+    const decoyY  = watchY + (Math.random() - 0.5) * 18;    // decoy in same window as watch
+
+    items.push(spawnOne('watch', pair.watch,  watchX, watchY));
+    if (pair.tricky) items.push(spawnOne('decoy', pair.tricky, decoyX, decoyY));
+  });
+
+  // Extra obvious decoys at random positions — some carry a "fake rare" glow
+  LEVEL.extras.forEach(key => {
+    const fakeRare = (LEVEL.fakeRare || []).includes(key);
+    items.push(spawnOne('decoy', key, 5 + Math.random() * 82, -5 - Math.random() * 55, { fakeRare }));
+  });
+
+  // Side-entry items: drift in from off-screen left/right while falling
+  (LEVEL.sideEntry || []).forEach((key, i) => {
+    const fromLeft = i % 2 === 0;
+    items.push(spawnOne('decoy', key, fromLeft ? -15 : 112, -10 + Math.random() * 50,
+      { sideEntry: true, fromLeft }));
+  });
+
+  // Rare watches: start far off-screen so they appear mid-level, not immediately
+  (LEVEL.rares || []).forEach(r => {
+    items.push(spawnOne('watch', r.watch, 10 + Math.random() * 72, -180 - Math.random() * 60,
+      { rare: true, speed: r.speed, passes: r.passes }));
+  });
+
+  showScreen('game');
+  lastTs = performance.now();
+  raf = requestAnimationFrame(loop);
+}
+
+// ─── GAME LOOP ────────────────────────────────────────────────────────────────
+
+function loop(ts) {
+  if (!running) return;
+
+  const dt = Math.min(ts - lastTs, 50);
+  lastTs = ts;
+
+  timer -= dt / 1000;
+  if (timer <= 0) { timer = 0; finish(); return; }
+  updateTimerDisplay();
+
+  items.forEach(item => {
+    if (item.caught || item.expired) return;
+    item.y   += item.speed  * dt;
+    item.rot += item.rotV   * dt;
+
+    if (item.driftV) {
+      item.x += item.driftV * dt;
+      if (!item.entered && item.x >= 0 && item.x <= 92) item.entered = true;
+      if (item.entered) {
+        if (LEVEL.bounce) {
+          // Bounce off the side walls, reversing drift direction
+          if (item.x < 0)       { item.x = 0;  item.driftV *= -1; }
+          else if (item.x > 90) { item.x = 90; item.driftV *= -1; }
+        } else {
+          // Drift off one side wraps around to the other
+          if (item.x < -8)      item.x = 96;
+          else if (item.x > 96) item.x = -8;
+        }
+      }
+      item.el.style.left = item.x + '%';
+    }
+
+    if (item.y > 108) {
+      if (item.rare) {
+        item.passes++;
+        if (item.passes >= item.maxPasses) {
+          item.expired = true;
+          item.el.remove();
+          return;
+        }
+        item.sparkled = false; // re-sparkle on next pass
+      }
+      item.y = item.rare ? (-120 - Math.random() * 80) : (-70 - Math.random() * 60);
+      if (!item.driftV) {
+        item.x = 5 + Math.random() * 78;
+        item.el.style.left = item.x + '%';
+      }
+    }
+
+    // Sparkle when a rare (or fake-rare) item enters view
+    if (item.glowKind && !item.sparkled && item.y > -4) {
+      item.sparkled = true;
+      item.el.classList.remove(item.glowKind + '-glow');
+      item.el.classList.add(item.glowKind + '-sparkle');
+      setTimeout(() => {
+        item.el.classList.remove(item.glowKind + '-sparkle');
+        item.el.classList.add(item.glowKind + '-glow');
+      }, 1050);
+    }
+
+    item.el.style.top       = item.y + '%';
+    item.el.style.transform = `rotate(${item.rot}deg)`;
+  });
+
+  raf = requestAnimationFrame(loop);
+}
+
+// ─── TIMER ────────────────────────────────────────────────────────────────────
+
+function updateTimerDisplay() {
+  const s = Math.ceil(timer);
+  const el = document.getElementById('hud-timer');
+  el.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  el.classList.toggle('urgent', timer <= 10);
+}
+
+// ─── CLICK HANDLING ───────────────────────────────────────────────────────────
+
+document.getElementById('game-area').addEventListener('click', e => {
+  if (!running) return;
+  const el = e.target.closest('.fall-item');
+  if (!el) return;
+
+  const item = items.find(i => i.el === el);
+  if (!item || item.caught) return;
+
+  if (item.type === 'watch') {
+    catchWatch(item, e.clientX, e.clientY);
+  } else {
+    hitDecoy(item, e.clientX, e.clientY);
+  }
+});
+
+function catchWatch(item, cx, cy) {
+  item.caught = true;
+  if (item.glowKind) item.el.classList.remove(item.glowKind + '-glow', item.glowKind + '-sparkle');
+  const watchId = item.key;
+  caught.push(watchId);
+
+  item.el.classList.add('catching');
+  setTimeout(() => item.el.remove(), 400);
+
+  float(WATCHES[watchId]?.name || watchId, cx, cy, 'ok');
+  document.getElementById('hud-count').textContent = caught.length;
+
+  const totalTargets = LEVEL.pairs.length + (LEVEL.catchRare ? (LEVEL.rares || []).length : 0);
+  if (caught.length >= totalTargets) setTimeout(finish, 500);
+}
+
+function hitDecoy(item, cx, cy) {
+  timer = Math.max(0, timer - LEVEL.penalty);
+  updateTimerDisplay();
+
+  // Timer jolt
+  const t = document.getElementById('hud-timer');
+  t.classList.remove('hit');
+  void t.offsetWidth;
+  t.classList.add('hit');
+  setTimeout(() => t.classList.remove('hit'), 380);
+
+  // Red flash
+  const f = document.getElementById('flash');
+  f.classList.remove('on');
+  void f.offsetWidth;
+  f.classList.add('on');
+
+  // Shake item
+  item.el.classList.remove('wrong-hit');
+  void item.el.offsetWidth;
+  item.el.classList.add('wrong-hit');
+  setTimeout(() => item.el.classList.remove('wrong-hit'), 350);
+
+  float('-' + LEVEL.penalty + 's', cx, cy, 'bad');
+}
+
+function float(txt, x, y, cls) {
+  const el = document.createElement('div');
+  el.className = 'float-txt ' + cls;
+  el.textContent = txt;
+  el.style.left = (x - 24) + 'px';
+  el.style.top  = (y - 16) + 'px';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), cls === 'bad' ? 1850 : 950);
+}
+
+// ─── FINISH ───────────────────────────────────────────────────────────────────
+
+function finish() {
+  running = false;
+  cancelAnimationFrame(raf);
+
+  const passed = caught.length >= LEVEL.need;
+  const score  = caught.reduce((s, id) => s + (WATCHES[id]?.points || 0), 0);
+
+  const timeBonus  = Math.round(timer * 2);   // leftover seconds → bonus pts (0 if time ran out)
+  const levelTotal = score + timeBonus;
+
+  totalScore += levelTotal;
+  caught.forEach(id => allCaught.add(id));
+
+  const hasNext = levelIndex < LEVELS.length - 1;
+
+  // Results screen
+  const allLevelWatches = LEVEL.pairs.map(p => p.watch)
+    .concat((LEVEL.rares || []).map(r => r.watch));
+  const totalWatches  = allLevelWatches.length;
+
+  // Per-level best score
+  const levelBestKey   = `swatchVibe_best_level_${levelIndex}`;
+  const isNewLevelBest = passed && setBestIfHigher(levelBestKey, levelTotal);
+  const levelBest      = getBest(levelBestKey);
+
+  let retryNote = '';
+  if (!passed) {
+    retryNote = replaysUsed === 0
+      ? 'You have one retry — miss it again and you\'ll restart from Level 1.'
+      : 'No retries left — starting over from Level 1.';
+  }
+
+  const statusEl     = document.getElementById('r-status');
+  const scoreLabelEl = document.getElementById('r-score-label');
+  const scoreEl      = document.getElementById('r-score');
+  const subEl        = document.getElementById('r-sub');
+  const statsEl      = document.getElementById('r-stats');
+
+  statsEl.innerHTML = '';
+  function addStat(label, value, gold) {
+    const chip = document.createElement('div');
+    chip.className = 'stat-chip' + (gold ? ' gold' : '');
+    chip.innerHTML = `<div class="stat-chip-label">${label}</div><div class="stat-chip-value">${value}</div>`;
+    statsEl.appendChild(chip);
+  }
+
+  if (!passed) {
+    // Fail (normal or final level) — hero is still this level's earned points
+    statusEl.textContent = "Time's Up";
+    statusEl.className   = 'r-status fail';
+
+    scoreLabelEl.style.display = 'none';
+    scoreEl.textContent = `${levelTotal} pts`;
+    scoreEl.className   = 'r-score fail';
+
+    subEl.innerHTML = `Needed ${LEVEL.need} to pass, got ${caught.length}. ${retryNote}`;
+
+    if (timeBonus > 0) addStat('Speed Bonus', `${timeBonus}`, true);
+  } else if (!hasNext) {
+    // Final level pass — Total Run Score is the hero, and the hero block
+    // is entirely about the run as a whole (per-level detail lives in the
+    // "Vibes Caught" / "Your Vibe Collection" sections below, as before).
+    statusEl.textContent = 'All Levels Complete';
+    statusEl.className   = 'r-status vibe';
+
+    scoreLabelEl.style.display = 'block';
+    scoreEl.textContent = totalScore;
+    scoreEl.className   = 'r-score vibe';
+
+    const isNewTotalBest = setBestIfHigher('swatchVibe_best_total', totalScore);
+    const bestTotal      = getBest('swatchVibe_best_total');
+    subEl.textContent = isNewTotalBest
+      ? 'New Best!'
+      : (bestTotal > 0 ? `Best: ${bestTotal} pts` : '');
+  } else {
+    // Normal level pass
+    statusEl.textContent = 'Level Complete';
+    statusEl.className   = 'r-status';
+
+    scoreLabelEl.style.display = 'none';
+    scoreEl.textContent = `${levelTotal} pts`;
+    scoreEl.className   = 'r-score';
+
+    subEl.textContent = `All ${totalWatches} watches caught!`;
+
+    if (timeBonus > 0) addStat('Speed Bonus', `${timeBonus}`, true);
+    if (isNewLevelBest) addStat('Level Best', 'New Best!', true);
+    else if (levelBest > 0) addStat('Level Best', `${levelBest} pts`);
+  }
+
+  // Caught vibe cards
+  const cRow = document.getElementById('r-caught');
+  cRow.innerHTML = '';
+
+  document.getElementById('r-caught-label').textContent = 'Vibes caught';
+
+  caught.forEach(id => cRow.appendChild(buildCard(id)));
+
+  // Collection showcase (shown on the final level, pass or fail)
+  const showcaseWrap = document.getElementById('r-showcase-wrap');
+
+  if (!hasNext) {
+    showcaseWrap.style.display = 'flex';
+    const showcaseRow = document.getElementById('r-showcase');
+    showcaseRow.innerHTML = '';
+    [...allCaught].forEach(id => showcaseRow.appendChild(buildTrophyTile(id)));
+  } else {
+    showcaseWrap.style.display = 'none';
+  }
+
+  // Footer
+  const footer = document.getElementById('results-footer');
+  if (passed && hasNext) {
+    footer.innerHTML = `
+      <button class="btn" onclick="selectLevel(${levelIndex + 1})">Go to Next Level →</button>
+    `;
+  } else if (passed && !hasNext) {
+    footer.innerHTML = `
+      <button class="btn" onclick="scrollToCollection()">View Collection ↓</button>
+      <button class="btn ghost" onclick="selectLevel(0)">Restart Game</button>
+    `;
+  } else if (!hasNext) {
+    // Failed on the final level — collection showcase is on this page too.
+    const replayBtn = replaysUsed === 0
+      ? `<button class="btn" onclick="replayLevel()">Replay Level</button>`
+      : `<button class="btn" onclick="selectLevel(0)">Start Over from Level 1</button>`;
+    footer.innerHTML = `
+      ${replayBtn}
+      <button class="btn ghost" onclick="scrollToCollection()">View Collection ↓</button>
+      <button class="btn ghost" onclick="selectLevel(0)">Restart Game</button>
+    `;
+  } else if (replaysUsed === 0) {
+    footer.innerHTML = `
+      <button class="btn" onclick="replayLevel()">Replay Level</button>
+    `;
+  } else {
+    footer.innerHTML = `
+      <button class="btn" onclick="selectLevel(0)">Start Over from Level 1</button>
+    `;
+  }
+
+  showScreen('results');
+}
+
+// ─── VIBE CARD BUILDER ────────────────────────────────────────────────────────
+
+function buildCard(id) {
+  const w = WATCHES[id];
+  if (!w) return document.createElement('div');
+
+  const badge = w.rarity === 'limited'
+    ? `<div class="vc-badge" style="color:#FFD700;border-color:#FFD700">Rare</div>`
+    : '';
+
+  const card = document.createElement('div');
+  card.className = 'vibe-card';
+  card.innerHTML = `
+    <div class="vc-top">
+      <div>${makeWatch(id).replace('width="50" height="125"', 'width="44" height="110"')}</div>
+      <div>
+        <div class="vc-name">${w.name}</div>
+        ${badge}
+        <div class="vc-pts">${w.points} pts</div>
+      </div>
+    </div>
+    <div class="vc-body">
+      <div class="vc-section">
+        <div class="vc-lbl">Style</div>
+        <div class="vc-head">${w.outfit.headline}</div>
+        <div class="vc-body-txt">${w.outfit.scene}</div>
+      </div>
+      <div class="vc-section">
+        <div class="vc-lbl">Moment</div>
+        <div class="vc-head">${w.moment.headline}</div>
+        <div class="vc-body-txt">${w.moment.text}</div>
+      </div>
+      <div class="vc-section">
+        <div class="vc-lbl">Music</div>
+        <div class="vc-head">${w.music.energy}</div>
+        <div class="vc-body-txt">${w.music.vibe}</div>
+      </div>
+    </div>
+  `;
+  return card;
+}
+
+function buildTrophyTile(id) {
+  const w = WATCHES[id];
+  if (!w) return document.createElement('div');
+
+  const badge = w.rarity === 'limited'
+    ? `<div class="vc-badge" style="color:#FFD700;border-color:#FFD700">Rare</div>`
+    : '';
+
+  const tile = document.createElement('div');
+  tile.className = 'trophy-tile';
+  tile.innerHTML = `
+    <div>${makeWatch(id).replace('width="50" height="125"', 'width="40" height="100"')}</div>
+    <div class="tt-name">${w.name}</div>
+    ${badge}
+  `;
+  return tile;
+}
+</script>
+</body>
+</html>
